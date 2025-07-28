@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import { connectToMongo, getDb, closeConnection } from './mongo';
+import loginRoutes from './rutas/loginRoutes';
 
 class Server {
     public app: Application;
@@ -48,6 +49,8 @@ class Server {
                 });
             }
         });
+
+        this.app.use('/auth', loginRoutes);
     }
 
     start(): void {
