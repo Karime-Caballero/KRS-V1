@@ -1,0 +1,7 @@
+node_modules/
+
+# Ignorar la carpeta de build
+build/
+
+# Ignorar el archivo .env
+.env
