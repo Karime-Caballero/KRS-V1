@@ -48,7 +48,7 @@ export default function HomePage() {
 
             <Stack direction="row" spacing={3}>
            <Box textAlign="center" mt={3}>
-            <Link href="/registro" passHref>
+            <Link href="/auth/registro" passHref>
               <Button
                 variant="contained"
                 sx={{
@@ -72,7 +72,7 @@ export default function HomePage() {
                 variant="outlined"
                 color="warning"
                 size="large"
-                href="/login"
+                href="/auth/login"
                 sx={{
                   borderRadius: 3,
                   px: 5,
