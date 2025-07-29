@@ -3,6 +3,7 @@ import morgan from 'morgan';
 import cors from 'cors';
 import { connectToMongo, getDb, closeConnection } from './mongo';
 import loginRoutes from './rutas/loginRoutes';
+import usuariosRoutes from './rutas/usuariosRoutes';
 
 class Server {
     public app: Application;
@@ -51,6 +52,7 @@ class Server {
         });
 
         this.app.use('/auth', loginRoutes);
+        this.app.use('/users', usuariosRoutes);
     }
 
     start(): void {
