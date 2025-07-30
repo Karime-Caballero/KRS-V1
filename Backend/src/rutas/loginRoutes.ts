@@ -1,5 +1,6 @@
 import { Router } from "express";
 import loginController from '../controladores/loginController';
+import { authenticateJWT } from "../Middleware/authMiddleware";
 
 class LoginRoutes {
     public router: Router = Router();
@@ -10,6 +11,9 @@ class LoginRoutes {
     
     config(): void {
         this.router.post('/signup', loginController.create);
+        this.router.post('/login', loginController.login);
+        this.router.post('/refresh', loginController.refreshToken);
+        this.router.post('/logout', authenticateJWT, loginController.logout);
     }
 }
 
