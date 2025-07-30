@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState} from 'react';
 import {
   Box,
   TextField,
@@ -11,13 +11,14 @@ import {
   Alert,
 } from '@mui/material';
 
+
 const RegistroPage = () => {
   // Estado para inputs
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
-    password: '',
-    passwordConfirm: '',
+    contrasena: '',
+    contrasenaConfirm: '',
   });
 
   // Estado para errores
@@ -53,40 +54,59 @@ const RegistroPage = () => {
     )
       newErrors.email = 'El correo no es válido';
 
-    if (!formData.password) newErrors.password = 'La contraseña es obligatoria';
-    else if (formData.password.length < 6)
-      newErrors.password = 'Debe tener al menos 6 caracteres';
+    if (!formData.contrasena) newErrors.contrasena = 'La contraseña es obligatoria';
+    else if (formData.contrasena.length < 6)
+      newErrors.contrasena = 'Debe tener al menos 6 caracteres';
 
-    if (!formData.passwordConfirm)
-      newErrors.passwordConfirm = 'Confirma tu contraseña';
-    else if (formData.passwordConfirm !== formData.password)
-      newErrors.passwordConfirm = 'Las contraseñas no coinciden';
+    if (!formData.contrasenaConfirm)
+      newErrors.contrasenaConfirm = 'Confirma tu contraseña';
+    else if (formData.contrasenaConfirm !== formData.contrasena)
+      newErrors.contrasenaConfirm = 'Las contraseñas no coinciden';
 
     return newErrors;
   };
 
   // Manejar envío
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    const validationErrors = validate();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setSubmitStatus('error');
-      return;
+  const validationErrors = validate();
+  if (Object.keys(validationErrors).length > 0) {
+    setErrors(validationErrors);
+    setSubmitStatus('error');
+    return;
+  }
+
+  try {
+    const response = await fetch('http://localhost:4000/auth/signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        nombre: formData.nombre,
+        email: formData.email,
+        contrasena: formData.contrasena,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al registrar el usuario');
     }
 
-    // Aquí iría la lógica real de registro (API, etc)
     setSubmitStatus('success');
-    alert('Registro exitoso!');
-    // Reiniciar formulario
+    // Limpiar formulario
     setFormData({
       nombre: '',
       email: '',
-      password: '',
-      passwordConfirm: '',
+      contrasena: '',
+      contrasenaConfirm: '',
     });
-  };
+  } catch (error) {
+    console.error(error);
+    setSubmitStatus('error');
+  }
+};
 
   return (
     <Box
@@ -173,30 +193,30 @@ const RegistroPage = () => {
             <TextField
               fullWidth
               label="Contraseña"
-              name="password"
-              type="password"
-              value={formData.password}
+              name="contrasena"
+              type="contrasena"
+              value={formData.contrasena}
               onChange={handleChange}
               margin="normal"
               required
-              autoComplete="new-password"
-              error={Boolean(errors.password)}
-              helperText={errors.password}
+              autoComplete="new-contrasena"
+              error={Boolean(errors.contrasena)}
+              helperText={errors.contrasena}
               placeholder="Mínimo 6 caracteres"
             />
 
             <TextField
               fullWidth
               label="Confirmar contraseña"
-              name="passwordConfirm"
-              type="password"
-              value={formData.passwordConfirm}
+              name="contrasenaConfirm"
+              type="contrasena"
+              value={formData.contrasenaConfirm}
               onChange={handleChange}
               margin="normal"
               required
-              autoComplete="new-password"
-              error={Boolean(errors.passwordConfirm)}
-              helperText={errors.passwordConfirm}
+              autoComplete="new-contrasena"
+              error={Boolean(errors.contrasenaConfirm)}
+              helperText={errors.contrasenaConfirm}
               placeholder="Repite tu contraseña"
             />
 
