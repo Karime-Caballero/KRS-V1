@@ -3,8 +3,9 @@ import { getDb } from '../mongo';
 import { ObjectId, Document } from 'mongodb';
 import xss from 'xss';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import securityConfig from '../config/config';
+import { AuthenticatedRequest } from '../Middleware/authMiddleware';
 
 interface InventarioItem {
     ingrediente_id: ObjectId;
@@ -205,6 +206,175 @@ class LoginController {
                 message: 'Error al registrar el usuario',
                 error: error instanceof Error ? this.sanitizeObject(error.message) : 'Error desconocido'
             });
+        }
+    }
+
+    public async login(req: Request, res: Response): Promise<void> {
+        try {
+            const email = xss(req.body.email);
+            const contrasena = xss(req.body.contrasena);
+
+            const db = getDb();
+            const usersCollection = db.collection<Usuario>('usuarios');
+
+            const user = await usersCollection.findOne({ email });
+
+            if (!user) {
+                res.status(401).json({ success: false, message: "Credenciales incorrectas" });
+                return;
+            }
+
+            const passwordMatch = await bcrypt.compare(contrasena, user.contrasena_enc);
+            if (!passwordMatch) {
+                res.status(401).json({ success: false, message: "Credenciales incorrectas" });
+                return;
+            }
+
+            if (user.estatus !== true && user.estatus !== "Activa") {
+                res.status(403).json({ success: false, message: "Cuenta deshabilitada" });
+                return;
+            }
+
+            const accessToken = this.generateAccessToken(user);
+            const refreshToken = this.generateRefreshToken(user);
+
+            // Corrección: Usar $addToSet para evitar duplicados
+            await usersCollection.updateOne(
+                { _id: user._id },
+                { $addToSet: { refreshTokens: refreshToken } }
+            );
+
+            res.cookie('refreshToken', refreshToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            });
+
+            res.json({
+                success: true,
+                message: "Inicio de sesión exitoso",
+                data: {
+                    accessToken,
+                    refreshToken,
+                    user: {
+                        _id: user._id,
+                        nombre: user.nombre,
+                        email: user.email,
+                        rol: user.rol
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Error en login:', error);
+            res.status(500).json({
+                success: false,
+                message: "Error interno del servidor",
+                error: error instanceof Error ? error.message : 'Error desconocido'
+            });
+        }
+    }
+
+    public async logout(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+            if (!refreshToken) {
+                res.status(400).json({ success: false, message: "Token de refresco no proporcionado" });
+                return;
+            }
+
+            const db = getDb();
+            const usersCollection = db.collection<Usuario>('usuarios');
+
+            const decoded = jwt.verify(refreshToken, securityConfig.jwt.secret) as JwtPayload;
+
+            await usersCollection.updateOne(
+                { _id: new ObjectId(decoded.userId) },
+                { $pull: { refreshTokens: refreshToken } }
+            );
+
+            res.clearCookie('refreshToken');
+
+            res.json({
+                success: true,
+                message: "Sesión cerrada correctamente"
+            });
+        } catch (error) {
+            console.error('Error en logout:', error);
+            res.status(500).json({
+                success: false,
+                message: "Error interno del servidor",
+                error: error instanceof Error ? error.message : 'Error desconocido'
+            });
+        }
+    }
+
+    public async refreshToken(req: Request, res: Response): Promise<void> {
+        try {
+            const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+            if (!refreshToken) {
+                res.status(401).json({ success: false, message: "Token de refresco no proporcionado" });
+                return;
+            }
+
+            const db = getDb();
+            const usersCollection = db.collection<Usuario>('usuarios');
+
+            const decoded = jwt.verify(refreshToken, securityConfig.jwt.secret) as JwtPayload;
+
+            const user = await usersCollection.findOne({
+                _id: new ObjectId(decoded.userId),
+                refreshTokens: refreshToken
+            });
+
+            if (!user) {
+                res.status(403).json({ success: false, message: "Token de refresco inválido" });
+                return;
+            }
+
+            const newAccessToken = this.generateAccessToken(user);
+            const newRefreshToken = this.generateRefreshToken(user);
+
+            // Corrección: Usar operaciones atómicas para actualizar
+            await usersCollection.updateOne(
+                { _id: user._id },
+                {
+                    $pull: { refreshTokens: refreshToken },
+                    $addToSet: { refreshTokens: newRefreshToken }
+                }
+            );
+
+            res.cookie('refreshToken', newRefreshToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            });
+
+            res.json({
+                success: true,
+                message: "Token actualizado correctamente",
+                data: {
+                    accessToken: newAccessToken,
+                    refreshToken: newRefreshToken
+                }
+            });
+
+        } catch (error) {
+            console.error('Error al refrescar token:', error);
+
+            if (error instanceof jwt.TokenExpiredError) {
+                res.status(401).json({ success: false, message: "Token de refresco expirado" });
+            } else if (error instanceof jwt.JsonWebTokenError) {
+                res.status(403).json({ success: false, message: "Token de refresco inválido" });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Error interno del servidor",
+                    error: error instanceof Error ? error.message : 'Error desconocido'
+                });
+            }
         }
     }
 }
