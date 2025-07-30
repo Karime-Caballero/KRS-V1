@@ -17,6 +17,12 @@ class UsuariosRoutes {
 
         // Rutas para preferencias
         this.router.put('/:_id/profile', usuariosController.guardarPreferenciasAlimentarias);
+
+        // Rutas para el inventario
+        this.router.get('/:_id/pantry', usuariosController.getPantry);
+        this.router.post('/:_id/pantry', usuariosController.addIngredienteInventario);
+        this.router.patch('/:_id/pantry/:itemId', usuariosController.updateInventarioItem);
+        this.router.delete('/:_id/pantry/:ingredienteId', usuariosController.removeIngredienteInventario);
     }
 }
 
