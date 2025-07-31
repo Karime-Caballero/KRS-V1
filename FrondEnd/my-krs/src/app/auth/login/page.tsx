@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   TextField,
@@ -11,16 +12,24 @@ import {
   Alert,
 } from '@mui/material';
 
+
 const LoginPage = () => {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
+    contrasena: '',
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [submitStatus, setSubmitStatus] = useState<'success' | 'error' | null>(
     null
   );
+
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
@@ -43,12 +52,12 @@ const LoginPage = () => {
     )
       newErrors.email = 'El correo no es válido';
 
-    if (!formData.password) newErrors.password = 'La contraseña es obligatoria';
+    if (!formData.contrasena) newErrors.contrasena = 'La contraseña es obligatoria';
 
     return newErrors;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const validationErrors = validate();
@@ -58,14 +67,41 @@ const LoginPage = () => {
       return;
     }
 
-    // Aquí iría la lógica real de inicio de sesión (API, etc)
-    setSubmitStatus('success');
-    alert('Inicio de sesión exitoso!');
-    // Opcional: limpiar formulario
-    setFormData({
-      email: '',
-      password: '',
-    });
+    try {
+      const response = await fetch('http://localhost:4000/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          contrasena: formData.contrasena,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al logearse');
+      }
+
+      setSubmitStatus('success');
+      alert('Inicio de sesión exitoso!');
+
+      if (response.ok) {
+        setSubmitStatus('success');
+        if (isMounted) {
+          router.push('/user/home');
+        }
+      }
+
+
+      // setFormData({
+      //   email: '',
+      //   contrasena: '',
+      // });
+    } catch (error) {
+      console.error(error);
+      setSubmitStatus('error');
+    }
   };
 
   return (
@@ -139,15 +175,15 @@ const LoginPage = () => {
             <TextField
               fullWidth
               label="Contraseña"
-              name="password"
-              type="password"
-              value={formData.password}
+              name="contrasena"
+              type="contrasena"
+              value={formData.contrasena}
               onChange={handleChange}
               margin="normal"
               required
-              autoComplete="current-password"
-              error={Boolean(errors.password)}
-              helperText={errors.password}
+              autoComplete="current-contrasena"
+              error={Boolean(errors.contrasena)}
+              helperText={errors.contrasena}
               placeholder="Tu contraseña"
             />
 
