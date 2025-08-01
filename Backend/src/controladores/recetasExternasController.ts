@@ -1,17 +1,26 @@
 import { Request, Response } from 'express';
 import xss from 'xss';
 import dotenv from 'dotenv';
+import NodeCache from 'node-cache';
+import axios from 'axios';
 
 dotenv.config();
 
-const SPOONACULAR_API_KEY = process.env.SPOONACULAR_API_KEY;
-const SPOONACULAR_BASE_URL = process.env.SPOONACULAR_BASE_URL;
+// Configuración de caché
+const SEARCH_CACHE_TTL = 3600; // 1 hora en segundos
+const DETAIL_CACHE_TTL = 86400; // 24 horas en segundos
+const searchCache = new NodeCache({ stdTTL: SEARCH_CACHE_TTL });
+const detailCache = new NodeCache({ stdTTL: DETAIL_CACHE_TTL });
 
 class RecetasExternasController {
+    private SPOONACULAR_BASE_URL: string;
+
     constructor() {
         this.buscarRecetas = this.buscarRecetas.bind(this);
         this.obtenerDetalleReceta = this.obtenerDetalleReceta.bind(this);
         this.buscarPorIngredientes = this.buscarPorIngredientes.bind(this);
+        
+        this.SPOONACULAR_BASE_URL = process.env.SPOONACULAR_BASE_URL || 'https://api.spoonacular.com/recipes';
     }
 
     private sanitizeQuery(query: any): any {
@@ -26,22 +35,61 @@ class RecetasExternasController {
         return sanitized;
     }
 
-    private async fetchFromSpoonacular(endpoint: string, params: Record<string, any>): Promise<any> {
-        const url = new URL(`${SPOONACULAR_BASE_URL}${endpoint}`);
-        params.apiKey = SPOONACULAR_API_KEY;
+    private getApiKey(): string {
+        const apiKeys = [
+            process.env.SPOONACULAR_API_KEY_1,
+            process.env.SPOONACULAR_API_KEY_2,
+            process.env.SPOONACULAR_API_KEY_3
+        ].filter(Boolean);
+        
+        return apiKeys[Math.floor(Math.random() * apiKeys.length)] || '';
+    }
 
+    private async fetchFromSpoonacular(endpoint: string, params: Record<string, any>, isDetail: boolean = false): Promise<any> {
+        const cacheKey = `${endpoint}_${JSON.stringify(params)}`;
+        
+        // Verificar caché primero
+        const cachedData = isDetail ? detailCache.get(cacheKey) : searchCache.get(cacheKey);
+        if (cachedData) {
+            console.log(`[CACHE] Recuperando de caché: ${cacheKey}`);
+            return cachedData;
+        }
+
+        // Rotar API Key
+        const apiKey = this.getApiKey();
+        if (!apiKey) {
+            throw new Error('No hay API keys disponibles para Spoonacular');
+        }
+
+        // Configurar URL
+        const url = new URL(`${this.SPOONACULAR_BASE_URL}${endpoint}`);
+        params.apiKey = apiKey;
+
+        // Añadir parámetros
         for (const [key, value] of Object.entries(params)) {
             if (value !== undefined && value !== null && value !== '') {
                 url.searchParams.append(key, String(value));
             }
         }
 
-        const response = await fetch(url.toString());
-        if (!response.ok) {
-            throw new Error(`Spoonacular error ${response.status}: ${await response.text()}`);
-        }
+        // Hacer la petición
+        try {
+            const response = await axios.get(url.toString(), {
+                timeout: 5000
+            });
 
-        return await response.json();
+            // Almacenar en caché
+            if (isDetail) {
+                detailCache.set(cacheKey, response.data);
+            } else {
+                searchCache.set(cacheKey, response.data);
+            }
+
+            return response.data;
+        } catch (error: any) {
+            console.error(`Error en API Spoonacular (${endpoint}):`, error.response?.data || error.message);
+            throw new Error(error.response?.data?.message || 'Error al consultar Spoonacular');
+        }
     }
 
     public async buscarRecetas(req: Request, res: Response): Promise<void> {
@@ -94,7 +142,8 @@ class RecetasExternasController {
 
             const data = await this.fetchFromSpoonacular(
                 `/recipes/${recetaId}/information`,
-                { includeNutrition: true }
+                { includeNutrition: false },
+                true // Es un detalle, usar caché de larga duración
             );
 
             res.status(200).json({ success: true, data });

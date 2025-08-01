@@ -3,7 +3,7 @@ import { ObjectId, Document, UpdateFilter, Filter } from 'mongodb';
 import { getDb } from '../mongo';
 import xss from 'xss';
 
-interface InventarioItem {
+export interface InventarioItem {
     ingrediente_id: ObjectId;
     nombre: string;
     categoria: string;
@@ -69,7 +69,7 @@ interface PreferenciasAlimenticias {
     utensilios_disponibles: string[]; // Ej: ["licuadora", "horno"]
 }
 
-interface Usuario extends Document {
+export interface Usuario extends Document {
     _id: ObjectId;
     nombre: string;
     email: string;
