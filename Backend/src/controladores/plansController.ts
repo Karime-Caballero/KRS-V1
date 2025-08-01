@@ -11,12 +11,6 @@ dotenv.config();
 // Configuración de caché (TTL de 24 horas, revisión cada hora)
 const recipeCache = new NodeCache({ stdTTL: 86400, checkperiod: 3600 });
 
-interface RecetaBasica {
-    id: number;
-    title: string;
-    image?: string;
-}
-
 interface RecetaDetalle {
     id: number;
     title: string;
@@ -274,28 +268,39 @@ class PlansController {
         const inventario = usuario.inventario || [];
         let pointsUsed = 0;
 
-        // Obtener todas las recetas necesarias de la API
+        // 1. Obtener recetas base de la API (con caché de búsqueda)
         const apiRecipes = await this.getFullWeekRecipesFromAPI(usuario);
         pointsUsed += apiRecipes.pointsUsed;
 
         if (apiRecipes.recipes.length < this.REQUIRED_API_RECIPES) {
-            throw new Error(`No se pudieron obtener suficientes recetas de la API (${apiRecipes.recipes.length}/${this.REQUIRED_API_RECIPES})`);
+            throw new Error(`No se pudieron obtener suficientes recetas (${apiRecipes.recipes.length}/${this.REQUIRED_API_RECIPES})`);
         }
 
-        // Distribuir las recetas a lo largo de la semana
+        // 2. Obtener detalles completos de cada receta (con caché individual)
+        const recipesWithDetails: RecetaDetalle[] = [];
+        for (const recipe of apiRecipes.recipes) {
+            try {
+                const recipeDetails = await this.getRecipeDetails(recipe.id);
+                recipesWithDetails.push(recipeDetails);
+                usedRecipeIds.add(recipe.id);
+            } catch (error) {
+                console.error(`Error procesando receta ${recipe.id}:`, error);
+                continue;
+            }
+        }
+
+        // 3. Distribuir recetas en los días
         let current = new Date(startDate);
         let recipeIndex = 0;
 
-        while (current <= endDate && recipeIndex < apiRecipes.recipes.length) {
+        while (current <= endDate && recipeIndex < recipesWithDetails.length) {
             const comidas = [];
             const mealTypes = ['lunch', 'dinner'];
 
             for (const tipo of mealTypes) {
-                if (recipeIndex >= apiRecipes.recipes.length) break;
+                if (recipeIndex >= recipesWithDetails.length) break;
 
-                const recipe = apiRecipes.recipes[recipeIndex++];
-                usedRecipeIds.add(recipe.id);
-
+                const recipe = recipesWithDetails[recipeIndex++];
                 const faltantes = this.getMissingIngredients(recipe.extendedIngredients, inventario);
 
                 comidas.push({
@@ -316,7 +321,7 @@ class PlansController {
             current.setDate(current.getDate() + 1);
         }
 
-        console.log(`Plan generado con ${apiRecipes.recipes.length} recetas de API (${pointsUsed} puntos usados)`);
+        console.log(`Plan generado con ${recipesWithDetails.length} recetas (${pointsUsed} puntos usados)`);
         return { dias, lista_compras };
     }
 
@@ -456,50 +461,48 @@ class PlansController {
             });
     }
 
-    private addToShoppingList(lista: PlanSemanal['lista_compras'], ingredientes: { nombre: string, cantidad: number, unidad: string }[]) {
-        ingredientes.forEach(i => {
-            const existente = lista.find(e =>
-                e.nombre.toLowerCase() === i.nombre.toLowerCase() && e.unidad === i.unidad
+    private addToShoppingList(
+        lista: PlanSemanal['lista_compras'],
+        ingredientes: { nombre: string, cantidad: number, unidad: string }[]
+    ) {
+        ingredientes.forEach(newIng => {
+            // Normaliza el nombre (sin espacios extras, lowercase) y verifica unidad
+            const normalizedNombre = newIng.nombre.trim().toLowerCase();
+            const existingItem = lista.find(item =>
+                item.nombre.trim().toLowerCase() === normalizedNombre &&
+                item.unidad === newIng.unidad
             );
 
-            if (existente) {
-                existente.cantidad += i.cantidad;
+            if (existingItem) {
+                // Suma la cantidad si ya existe un ítem idéntico
+                existingItem.cantidad += newIng.cantidad;
             } else {
+                // Agrega un nuevo ítem si no existe
                 lista.push({
-                    nombre: i.nombre,
-                    cantidad: i.cantidad,
-                    unidad: i.unidad,
-                    categoria: this.categorizeIngredient(i.nombre),
+                    nombre: newIng.nombre,
+                    cantidad: newIng.cantidad,
+                    unidad: newIng.unidad,
+                    categoria: this.categorizeIngredient(newIng.nombre),
                     comprado: false
                 });
             }
         });
     }
 
-    private mergeShoppingLists(mainList: PlanSemanal['lista_compras'], newList: PlanSemanal['lista_compras']) {
-        newList.forEach(item => {
-            const existente = mainList.find(i =>
-                i.nombre.toLowerCase() === item.nombre.toLowerCase() && i.unidad === item.unidad
-            );
-
-            if (existente) {
-                existente.cantidad += item.cantidad;
-            } else {
-                mainList.push({ ...item });
-            }
-        });
-    }
-
-    private async fetchRecipeWithCache(recipeId: number): Promise<RecetaDetalle> {
+    private async getRecipeDetails(recipeId: number): Promise<RecetaDetalle> {
         const cacheKey = `recipe_${recipeId}`;
         const cached = recipeDetailCache.get<RecetaDetalle>(cacheKey);
 
         if (cached) {
-            console.log(`[CACHE] Recuperando receta ${recipeId} de caché`);
+            console.log(`[CACHE] Receta ${recipeId} recuperada de caché`);
             return cached;
         }
 
         try {
+            if (!await this.trackApiCall(1)) { // 1 punto por consulta de detalle
+                throw new Error('Límite de puntos alcanzado para consultar receta');
+            }
+
             const response = await axios.get(`${this.SPOONACULAR_BASE_URL}/${recipeId}/information`, {
                 params: {
                     apiKey: this.SPOONACULAR_API_KEY,
@@ -512,6 +515,13 @@ class PlansController {
                 id: response.data.id,
                 title: response.data.title,
                 image: response.data.image,
+                readyInMinutes: response.data.readyInMinutes,
+                servings: response.data.servings,
+                sourceUrl: response.data.sourceUrl,
+                vegetarian: response.data.vegetarian,
+                vegan: response.data.vegan,
+                glutenFree: response.data.glutenFree,
+                dairyFree: response.data.dairyFree,
                 extendedIngredients: response.data.extendedIngredients.map((ing: any) => ({
                     name: ing.nameClean || ing.name,
                     amount: ing.amount,
@@ -540,17 +550,15 @@ class PlansController {
             };
 
             recipeDetailCache.set(cacheKey, recipeData);
+            console.log(`[API] Receta ${recipeId} almacenada en caché`);
             return recipeData;
         } catch (error: any) {
-            console.error(`Error obteniendo receta ${recipeId}:`, error.message);
-            return {
-                id: recipeId,
-                title: `Receta ${recipeId}`,
-                image: '',
-                extendedIngredients: [],
-                instructions: '',
-                analyzedInstructions: []
-            };
+            console.error(`Error al obtener receta ${recipeId}:`, error.message);
+            // Fallback a receta local si hay error
+            const mealType = recipeId % 2 === 0 ? 'lunch' : 'dinner';
+            const fallbackRecipe = this.getLocalFallbackRecipe(mealType);
+            recipeDetailCache.set(cacheKey, fallbackRecipe);
+            return fallbackRecipe;
         }
     }
 
@@ -662,6 +670,181 @@ class PlansController {
         const recipes = fallbackRecipes[tipo as keyof typeof fallbackRecipes];
         const randomIndex = Math.floor(Math.random() * recipes.length);
         return recipes[randomIndex];
+    }
+
+    public async updateShoppingListItems(req: Request, res: Response): Promise<Response> {
+        try {
+            const { plan_id } = req.params;
+            const { items } = req.body; // Array de items con su estado {nombre, comprado}
+
+            // Validaciones básicas
+            if (!plan_id || !ObjectId.isValid(plan_id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un plan_id válido'
+                });
+            }
+
+            if (!Array.isArray(items) || items.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un array de items en el body con al menos un elemento'
+                });
+            }
+
+            const db = getDb();
+
+            // 1. Obtener el plan completo
+            const plan = await db.collection<PlanSemanal>('planes_semanales').findOne(
+                { _id: new ObjectId(plan_id) },
+                { projection: { usuario_id: 1, lista_compras: 1 } }
+            );
+
+            if (!plan) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Plan no encontrado'
+                });
+            }
+
+            // 2. Normalizar nombres para comparación (evitar diferencias por mayúsculas/espacios)
+            const normalizeName = (name: string) => name.trim().toLowerCase();
+
+            // 3. Preparar operaciones de actualización
+            const bulkUpdates = [];
+            const itemsParaInventario = [];
+            const itemsNoEncontrados = [];
+
+            for (const itemUpdate of items) {
+                const nombreNormalizado = normalizeName(itemUpdate.nombre);
+                const itemOriginal = plan.lista_compras.find(
+                    item => normalizeName(item.nombre) === nombreNormalizado
+                );
+
+                if (itemOriginal) {
+                    // Preparar actualización para este item
+                    bulkUpdates.push({
+                        updateOne: {
+                            filter: {
+                                _id: new ObjectId(plan_id),
+                                'lista_compras.nombre': itemOriginal.nombre // Buscar por nombre exacto original
+                            },
+                            update: {
+                                $set: {
+                                    'lista_compras.$.comprado': itemUpdate.comprado,
+                                    fecha_actualizacion: new Date()
+                                }
+                            }
+                        }
+                    });
+
+                    // Si está marcado como comprado, agregar al inventario
+                    if (itemUpdate.comprado) {
+                        itemsParaInventario.push({
+                            ingrediente_id: new ObjectId(),
+                            nombre: itemOriginal.nombre, // Mantener el nombre original
+                            cantidad: itemOriginal.cantidad,
+                            unidad: itemOriginal.unidad,
+                            categoria: itemOriginal.categoria || 'otros',
+                            almacenamiento: 'desconocido',
+                            fecha_actualizacion: new Date()
+                        });
+                    }
+                } else {
+                    itemsNoEncontrados.push(itemUpdate.nombre);
+                }
+            }
+
+            // 4. Ejecutar actualizaciones si hay items válidos
+            if (bulkUpdates.length > 0) {
+                await db.collection('planes_semanales').bulkWrite(bulkUpdates);
+            }
+
+            // 5. Agregar items comprados al inventario
+            if (itemsParaInventario.length > 0) {
+                try {
+                    await db.collection('usuarios').updateOne(
+                        { _id: plan.usuario_id },
+                        {
+                            // @ts-ignore - Solución temporal para el tipo
+                            $push: { inventario: { $each: itemsParaInventario } },
+                            $set: { fecha_actualizacion: new Date() }
+                        }
+                    );
+                } catch (error) {
+                    console.error('Error al actualizar inventario:', error);
+                    // No fallar la operación completa por esto
+                }
+            }
+
+            // 6. Preparar respuesta
+            const response: any = {
+                success: true,
+                message: 'Operación completada',
+                data: {
+                    items_actualizados: bulkUpdates.length,
+                    items_agregados_inventario: itemsParaInventario.length
+                }
+            };
+
+            if (itemsNoEncontrados.length > 0) {
+                response.data.items_no_encontrados = itemsNoEncontrados;
+                response.message = 'Operación completada con algunos items no encontrados';
+            }
+
+            return res.status(200).json(response);
+
+        } catch (error: any) {
+            console.error('Error al actualizar items de compra:', error);
+            return res.status(500).json({
+                success: false,
+                message: error.message || 'Error al actualizar los items'
+            });
+        }
+    }
+
+    // Obtiene la lista de compras de un plan específico
+    public async getShoppingList(req: Request, res: Response): Promise<Response> {
+        try {
+            const { plan_id } = req.params;
+
+            if (!plan_id || !ObjectId.isValid(plan_id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un plan_id válido'
+                });
+            }
+
+            const db = getDb();
+
+            // Obtener solo la lista de compras del plan
+            const plan = await db.collection<PlanSemanal>('planes_semanales').findOne(
+                { _id: new ObjectId(plan_id) },
+                { projection: { lista_compras: 1, usuario_id: 1 } }
+            );
+
+            if (!plan) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Plan no encontrado'
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    plan_id,
+                    lista_compras: plan.lista_compras || []
+                }
+            });
+
+        } catch (error: any) {
+            console.error('Error al obtener lista de compras:', error);
+            return res.status(500).json({
+                success: false,
+                message: error.message || 'Error al obtener la lista de compras'
+            });
+        }
     }
 }
 

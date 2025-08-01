@@ -550,7 +550,7 @@ class UsuariosController {
 
             for (const [index, item] of ingredientesToAdd.entries()) {
                 const ingredienteData: InventarioItem = {
-                    ingrediente_id: new ObjectId(item.ingrediente_id || new ObjectId().toString()),
+                    ingrediente_id: new ObjectId(item.ingrediente_id || new ObjectId()),
                     ...sanitizeInput(item),
                     fecha_actualizacion: new Date(item.fecha_actualizacion) || new Date()
                 } as InventarioItem;

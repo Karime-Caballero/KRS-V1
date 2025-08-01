@@ -14,6 +14,12 @@ class PlansRoutes {
         
         // Obtener plan específico (GET)
         this.router.get('/:plan_id', plansController.getPlan);
+
+        // Obtener lista de compras de un plan (GET)
+        this.router.get('/:plan_id/lista-compras', plansController.getShoppingList);
+
+        // Actualizar ítem de lista de compras (PATCH)
+        this.router.patch('/:plan_id/lista-compras', plansController.updateShoppingListItems);
     }
 }
 
