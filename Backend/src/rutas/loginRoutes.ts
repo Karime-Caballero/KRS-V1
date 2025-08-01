@@ -11,7 +11,7 @@ class LoginRoutes {
     
     config(): void {
         this.router.post('/signup', loginController.create);
-        this.router.post('/login', loginController.login);
+        this.router.post('/login', loginController.login.bind(loginController));
         this.router.post('/refresh', loginController.refreshToken);
         this.router.post('/logout', authenticateJWT, loginController.logout);
     }
