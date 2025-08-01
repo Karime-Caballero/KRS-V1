@@ -5,6 +5,7 @@ import { connectToMongo, getDb, closeConnection } from './mongo';
 import loginRoutes from './rutas/loginRoutes';
 import usuariosRoutes from './rutas/usuariosRoutes';
 import recetasExternasRoutes from './rutas/recetasExternasRoutes';
+import plansRoutes from './rutas/plansRoutes';
 
 class Server {
     public app: Application;
@@ -55,6 +56,7 @@ class Server {
         this.app.use('/auth', loginRoutes);
         this.app.use('/users', usuariosRoutes);
         this.app.use('/recipes', recetasExternasRoutes);
+        this.app.use('/plans', plansRoutes);
     }
 
     start(): void {
