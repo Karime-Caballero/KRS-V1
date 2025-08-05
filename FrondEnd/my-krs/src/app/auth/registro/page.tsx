@@ -112,7 +112,7 @@ const handleTogglePassword = () => {
       contrasena: '',
       contrasenaConfirm: '',
     });
-    router.push('/user/formulario');
+    router.push('/auth/login');
 
   } catch (error) {
     console.error(error);

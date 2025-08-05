@@ -27,14 +27,21 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { amber, orange, yellow } from '@mui/material/colors';
 import { SelectChangeEvent } from '@mui/material/Select';
-import { useRouter } from 'next/navigation';
-import CloseIcon from '@mui/icons-material/Close';
-
 
 const alergiasBase = ['Gluten', 'Lácteos', 'Frutos secos', 'Mariscos', 'Soja', 'Otra'];
 const unidades = ['gramos', 'ml', 'piezas', 'cucharadas', 'tazas'];
 const categorias = ['Cereal', 'Lácteos', 'Frutas', 'Verduras', 'Carnes', 'Otros'];
 const almacenamientos = ['Refrigerado', 'Congelado', 'Despensa', 'Otro'];
+
+const opcionesDietas = [
+  'Vegetariana',
+  'Vegana',
+  'Cetogénica',
+  'Sin gluten',
+  'Sin lactosa',
+  'Omnívora',
+  'Otra',
+];
 
 interface Ingrediente {
   nombre: string;
@@ -58,6 +65,11 @@ const PerfilAlimenticio = () => {
   const [almacenamiento, setAlmacenamiento] = useState('');
   const [errors, setErrors] = useState({ nombre: false, cantidad: false });
 
+  // Nuevos campos agregados
+  const [dietas, setDietas] = useState<string[]>([]);
+  const [ingredientesEvitar, setIngredientesEvitar] = useState('');
+  const [tiempoMaximoPreparacion, setTiempoMaximoPreparacion] = useState('');
+
   const [editMode, setEditMode] = useState(false);
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -69,24 +81,26 @@ const PerfilAlimenticio = () => {
       setAlergias(datos.alergias || []);
       setObjetivo(datos.objetivoNutricional || '');
       setIngredientes(datos.ingredientesCasa || []);
+      setDietas(datos.dietas || []);
+      setIngredientesEvitar(datos.ingredientesEvitar || '');
+      setTiempoMaximoPreparacion(datos.tiempoMaximoPreparacion || '');
     }
   }, []);
 
- const handleAlergiasChange = (event: SelectChangeEvent<string[]>) => {
-  const selected = event.target.value as string[];
+  const handleAlergiasChange = (event: SelectChangeEvent<string[]>) => {
+    const selected = event.target.value as string[];
 
-  if (selected.includes('Otra') && !alergias.includes('Otra')) {
-    setMostrarOtraAlergia(true);
-  }
+    if (selected.includes('Otra') && !alergias.includes('Otra')) {
+      setMostrarOtraAlergia(true);
+    }
 
-  if (!selected.includes('Otra')) {
-    setMostrarOtraAlergia(false);
-    setOtraAlergia('');
-  }
+    if (!selected.includes('Otra')) {
+      setMostrarOtraAlergia(false);
+      setOtraAlergia('');
+    }
 
-  setAlergias(selected.filter((a) => a !== 'Otra'));
-};
-
+    setAlergias(selected.filter((a) => a !== 'Otra'));
+  };
 
   const agregarOtraAlergia = () => {
     const nueva = otraAlergia.trim();
@@ -137,37 +151,44 @@ const PerfilAlimenticio = () => {
     setIngredientes(copia);
   };
 
- const actualizarIngrediente = (
-  index: number,
-  campo: keyof Ingrediente,
-  valor: string | number
-) => {
-  const copia = [...ingredientes];
+  const actualizarIngrediente = (
+    index: number,
+    campo: keyof Ingrediente,
+    valor: string | number
+  ) => {
+    const copia = [...ingredientes];
 
-  if (campo === 'cantidad') {
-    const num = Number(valor);
-    if (isNaN(num) || num <= 0) {
-      setSnackbar({
-        open: true,
-        message: 'Cantidad inválida. Debe ser un número positivo.',
-        severity: 'warning',
-      });
-      return;
+    if (campo === 'cantidad') {
+      const num = Number(valor);
+      if (isNaN(num) || num <= 0) {
+        setSnackbar({
+          open: true,
+          message: 'Cantidad inválida. Debe ser un número positivo.',
+          severity: 'warning',
+        });
+        return;
+      }
+      copia[index][campo] = num;
+    } else if (
+      campo === 'nombre' ||
+      campo === 'unidad' ||
+      campo === 'categoria' ||
+      campo === 'almacenamiento'
+    ) {
+      copia[index][campo] = valor as string;
     }
-    copia[index][campo] = num;
-  } else if (campo === 'nombre' || campo === 'unidad') {
-    copia[index][campo] = valor as string;
-  }
 
-  setIngredientes(copia);
-};
-
+    setIngredientes(copia);
+  };
 
   const descargarPerfil = () => {
     const datos = {
       alergias,
       objetivoNutricional: objetivo,
       ingredientesCasa: ingredientes,
+      dietas,
+      ingredientesEvitar,
+      tiempoMaximoPreparacion,
     };
     const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -183,15 +204,15 @@ const PerfilAlimenticio = () => {
       alergias,
       objetivoNutricional: objetivo,
       ingredientesCasa: ingredientes,
+      dietas,
+      ingredientesEvitar,
+      tiempoMaximoPreparacion,
     };
 
     try {
       localStorage.setItem('perfilAlimenticio', JSON.stringify(datosPerfil));
 
-      // Aquí iría el fetch si tienes backend
-      // const response = await fetch('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datosPerfil) });
-      // if (!response.ok) throw new Error('Error al guardar en el backend');
-      // const data = await response.json();
+      // Si tienes backend, aquí puedes agregar fetch para enviar datos
 
       setSnackbar({
         open: true,
@@ -208,7 +229,7 @@ const PerfilAlimenticio = () => {
   const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
   return (
-    <Container maxWidth={false}  sx={{ width: '100vw', height: '100vh', p: 1, m: 0.5 }}>
+    <Container maxWidth={false} sx={{ width: '100vw', height: '100vh', p: 1, m: 0.5 }}>
       <Paper
         elevation={6}
         sx={{
@@ -225,60 +246,88 @@ const PerfilAlimenticio = () => {
         <Divider sx={{ my: 3 }} />
 
         <FormControl fullWidth margin="normal">
-          <InputLabel>Alergias</InputLabel>
+  <InputLabel>Alergias</InputLabel>
+  <Select
+    multiple
+    value={[...alergias, ...(mostrarOtraAlergia ? ['Otra'] : [])]}
+    onChange={handleAlergiasChange}
+    renderValue={(selected) => (
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+        {(selected as string[]).map((value) => (
+          <Chip key={value} label={value} color="warning" />
+        ))}
+      </Box>
+    )}
+    disabled={!editMode} // cambiar aquí para que habilite solo en modo edición
+  >
+    {alergiasBase.map((alergia) => (
+      <MenuItem key={alergia} value={alergia}>
+        {alergia}
+      </MenuItem>
+    ))}
+  </Select>
+</FormControl>
+
+{mostrarOtraAlergia && editMode && (  // mostrar solo si está en modo edición
+  <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
+    <Grid item xs={9}>
+      <TextField
+        fullWidth
+        label="Especificar otra alergia"
+        value={otraAlergia}
+        onChange={(e) => setOtraAlergia(e.target.value)}
+        disabled={!editMode} // habilitar solo en modo edición
+      />
+    </Grid>
+    <Grid item xs={3}>
+      <Button
+        variant="contained"
+        fullWidth
+        onClick={agregarOtraAlergia}
+        sx={{ bgcolor: orange[500], '&:hover': { bgcolor: orange[600] } }}
+        disabled={!editMode} // habilitar solo en modo edición
+      >
+        Agregar
+      </Button>
+    </Grid>
+  </Grid>
+)}
+
+        {/* NUEVOS CAMPOS */}
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Tipo de dieta</InputLabel>
           <Select
             multiple
-            value={[...alergias, ...(mostrarOtraAlergia ? ['Otra'] : [])]}
-            onChange={handleAlergiasChange}
-            renderValue={(selected) => (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {selected.map((value) => (
-                  <Chip key={value} label={value} color="warning" />
-                ))}
-              </Box>
-            )}
-            disabled={editMode}
+            value={dietas}
+            onChange={(e) => setDietas(e.target.value as string[])}
+            disabled={!editMode}
+            renderValue={(selected) => (selected as string[]).join(', ')}
           >
-            {alergiasBase.map((alergia) => (
-              <MenuItem key={alergia} value={alergia}>
-                {alergia}
+            {opcionesDietas.map((d) => (
+              <MenuItem key={d} value={d}>
+                {d}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
 
-        {mostrarOtraAlergia && !editMode && (
-          <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
-            <Grid item xs={9}>
-              <TextField
-                fullWidth
-                label="Especificar otra alergia"
-                value={otraAlergia}
-                onChange={(e) => setOtraAlergia(e.target.value)}
-                disabled={editMode}
-              />
-            </Grid>
-            <Grid item xs={3}>
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={agregarOtraAlergia}
-                sx={{ bgcolor: orange[500], '&:hover': { bgcolor: orange[600] } }}
-                disabled={editMode}
-              >
-                Agregar
-              </Button>
-            </Grid>
-          </Grid>
-        )}
-
         <TextField
+          label="Ingredientes que deseas evitar"
           fullWidth
           margin="normal"
-          label="Objetivo Nutricional"
-          value={objetivo}
-          onChange={(e) => setObjetivo(e.target.value)}
-          disabled={editMode}
+          value={ingredientesEvitar}
+          onChange={(e) => setIngredientesEvitar(e.target.value)}
+          disabled={!editMode}
+        />
+
+        <TextField
+          label="Tiempo máximo de preparación (minutos)"
+          type="number"
+          fullWidth
+          margin="normal"
+          value={tiempoMaximoPreparacion}
+          onChange={(e) => setTiempoMaximoPreparacion(e.target.value)}
+          disabled={!editMode}
         />
 
         <Divider sx={{ my: 3 }} />
@@ -326,7 +375,7 @@ const PerfilAlimenticio = () => {
               </FormControl>
             </Grid>
 
-           <Grid item xs={2} sm={2} sx={{ width: 200 }}>
+            <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Categoría</InputLabel>
                 <Select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
@@ -513,43 +562,33 @@ const PerfilAlimenticio = () => {
             variant="outlined"
             onClick={descargarPerfil}
             sx={{
-              borderColor: orange[400],
+              borderColor: orange[600],
               color: orange[600],
               '&:hover': {
-                bgcolor: orange[50],
-                borderColor: orange[600],
+                borderColor: orange[700],
+                color: orange[700],
               },
             }}
           >
-            Descargar JSON
+            Descargar Perfil
           </Button>
         </Box>
-      </Paper>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity={snackbar.severity as any}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={4000}
           onClose={handleCloseSnackbar}
-          variant="filled"
-          sx={{
-            bgcolor:
-              snackbar.severity === 'success'
-                ? yellow[700]
-                : snackbar.severity === 'warning'
-                ? orange[500]
-                : '#d32f2f',
-          }}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Paper>
     </Container>
   );
 };
 
 export default PerfilAlimenticio;
+
+
