@@ -44,7 +44,6 @@ interface PreferenciasAlimenticias {
         desayuno: string;
         almuerzo: string;
         cena: string;
-        snacks: string[];
     };
     frecuencia_comidas: number; // Veces al día
 
@@ -299,6 +298,53 @@ class UsuariosController {
             res.status(500).json({
                 success: false,
                 message: 'Error al eliminar el usuario',
+                error: error instanceof Error ? error.message : 'Error desconocido'
+            });
+        }
+    }
+
+    public async obtenerPreferenciasAlimentarias(req: Request, res: Response): Promise<void> {
+        try {
+            const { _id } = req.params;
+
+            // Validación del ID
+            if (!_id || !ObjectId.isValid(_id)) {
+                res.status(400).json({
+                    success: false,
+                    message: 'ID de usuario no válido'
+                });
+                return;
+            }
+
+            const db = getDb();
+
+            // Buscar usuario por ID y proyectar solo las preferencias
+            const usuario = await db.collection('usuarios').findOne(
+                { _id: new ObjectId(_id) },
+                { projection: { preferencias: 1 } }
+            );
+
+            if (!usuario || !usuario.preferencias) {
+                res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado o no tiene preferencias registradas'
+                });
+                return;
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Preferencias alimentarias obtenidas correctamente',
+                data: {
+                    preferencias: usuario.preferencias
+                }
+            });
+
+        } catch (error) {
+            console.error('Error al obtener preferencias:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al obtener las preferencias',
                 error: error instanceof Error ? error.message : 'Error desconocido'
             });
         }
