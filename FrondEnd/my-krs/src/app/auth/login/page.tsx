@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -12,6 +12,7 @@ import {
   Alert,
 } from '@mui/material';
 
+import Link from 'next/link'; // Importar para link (si usas next/link)
 
 const LoginPage = () => {
   const router = useRouter();
@@ -25,12 +26,6 @@ const LoginPage = () => {
     null
   );
 
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
       ...prev,
@@ -40,6 +35,7 @@ const LoginPage = () => {
     setErrors((prev) => ({
       ...prev,
       [e.target.name]: '',
+      general: '',
     }));
     setSubmitStatus(null);
   };
@@ -73,33 +69,27 @@ const LoginPage = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email: formData.email,
-          contrasena: formData.contrasena,
-        }),
+        body: JSON.stringify(formData),
       });
+      console.log('Enviando datos:', formData);
 
       if (!response.ok) {
-        throw new Error('Error al logearse');
+        const errorResult = await response.json();
+        throw new Error(errorResult.message || 'Error al logearse');
       }
+
+      const result = await response.json();
+      console.log('Respuesta backend:', result);
+
+      localStorage.setItem('token', result.data.accessToken);
+      localStorage.setItem('user', JSON.stringify(result.data.user));
 
       setSubmitStatus('success');
-      alert('Inicio de sesión exitoso!');
+      router.push('/user/home');
 
-      if (response.ok) {
-        setSubmitStatus('success');
-        if (isMounted) {
-          router.push('/user/home');
-        }
-      }
-
-
-      // setFormData({
-      //   email: '',
-      //   contrasena: '',
-      // });
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      setErrors({ general: error.message || 'Error al logearse' });
       setSubmitStatus('error');
     }
   };
@@ -109,7 +99,7 @@ const LoginPage = () => {
       sx={{
         minHeight: '100vh',
         background:
-          'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', // Fondo cálido y amigable
+          'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -144,7 +134,13 @@ const LoginPage = () => {
             Ingresa tus datos para acceder a tu cuenta
           </Typography>
 
-          {submitStatus === 'error' && (
+          {errors.general && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {errors.general}
+            </Alert>
+          )}
+
+          {submitStatus === 'error' && !errors.general && (
             <Alert severity="error" sx={{ mb: 2 }}>
               Por favor corrige los errores para continuar.
             </Alert>
@@ -176,7 +172,7 @@ const LoginPage = () => {
               fullWidth
               label="Contraseña"
               name="contrasena"
-              type="contrasena"
+              type="password"
               value={formData.contrasena}
               onChange={handleChange}
               margin="normal"
@@ -207,6 +203,25 @@ const LoginPage = () => {
             >
               Entrar
             </Button>
+            <Typography
+              variant="body2"
+              align="center"
+              sx={{ mt: 2, cursor: 'pointer', color: '#ef6c00' }}
+            >
+              ¿No tienes una cuenta?{' '}
+              <Link href="/auth/registro" passHref>
+                <Box
+                  component="a"
+                  sx={{
+                    fontWeight: 'bold',
+                    textDecoration: 'underline',
+                    color: 'inherit',
+                  }}
+                >
+                  Registrate aquí
+                </Box>
+              </Link>
+            </Typography>
           </Box>
         </Paper>
       </Container>

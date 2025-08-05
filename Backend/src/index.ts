@@ -6,6 +6,7 @@ import loginRoutes from './rutas/loginRoutes';
 import usuariosRoutes from './rutas/usuariosRoutes';
 import recetasExternasRoutes from './rutas/recetasExternasRoutes';
 import plansRoutes from './rutas/plansRoutes';
+import bodyParser from 'body-parser';
 
 class Server {
     public app: Application;

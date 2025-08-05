@@ -7,8 +7,11 @@ import EmojiFoodBeverageIcon from '@mui/icons-material/EmojiFoodBeverage';
 import TimerIcon from '@mui/icons-material/Timer';
 import Image from 'next/image';
 import Link from 'next/link';
+import Navbar from '@/components/Navbar';
+
 
 export default function HomePage() {
+   <Navbar />
   return (
     <Box
       sx={{

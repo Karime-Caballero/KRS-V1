@@ -210,6 +210,10 @@ class LoginController {
     }
 
     public async login(req: Request, res: Response): Promise<void> {
+
+         console.log("📥 Se llamó al endpoint /login");
+
+         
         try {
             const email = xss(req.body.email);
             const contrasena = xss(req.body.contrasena);
@@ -235,6 +239,8 @@ class LoginController {
                 return;
             }
 
+
+            console.log(`🔐 Usuario logueado: ${user.email} | ID: ${user._id.toString()}`);
             const accessToken = this.generateAccessToken(user);
             const refreshToken = this.generateRefreshToken(user);
 

@@ -10,6 +10,10 @@ import {
   Paper,
   Alert,
 } from '@mui/material';
+import { IconButton, InputAdornment } from "@mui/material";
+import { Visibility, VisibilityOff } from "@mui/icons-material";
+import { useRouter } from 'next/navigation';
+import Link from 'next/link'; // Importar para link (si usas next/link)
 
 
 const RegistroPage = () => {
@@ -23,12 +27,18 @@ const RegistroPage = () => {
 
   // Estado para errores
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const router = useRouter();
+
 
   // Estado para mostrar mensaje éxito o error general
   const [submitStatus, setSubmitStatus] = useState<'success' | 'error' | null>(
     null
   );
+const [showPassword, setShowPassword] = useState(false);
 
+const handleTogglePassword = () => {
+  setShowPassword((prev) => !prev);
+};
   // Manejar cambios en inputs
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
@@ -102,6 +112,8 @@ const RegistroPage = () => {
       contrasena: '',
       contrasenaConfirm: '',
     });
+    router.push('/user/formulario');
+
   } catch (error) {
     console.error(error);
     setSubmitStatus('error');
@@ -191,35 +203,54 @@ const RegistroPage = () => {
             />
 
             <TextField
-              fullWidth
-              label="Contraseña"
-              name="contrasena"
-              type="contrasena"
-              value={formData.contrasena}
-              onChange={handleChange}
-              margin="normal"
-              required
-              autoComplete="new-contrasena"
-              error={Boolean(errors.contrasena)}
-              helperText={errors.contrasena}
-              placeholder="Mínimo 6 caracteres"
-            />
+  fullWidth
+  label="Contraseña"
+  name="contrasena"
+  type={showPassword ? "text" : "password"}
+  value={formData.contrasena}
+  onChange={handleChange}
+  margin="normal"
+  required
+  autoComplete="new-password"
+  error={Boolean(errors.contrasena)}
+  helperText={errors.contrasena}
+  placeholder="Mínimo 6 caracteres"
+  InputProps={{
+    endAdornment: (
+      <InputAdornment position="end">
+        <IconButton onClick={handleTogglePassword} edge="end">
+          {showPassword ? <VisibilityOff /> : <Visibility />}
+        </IconButton>
+      </InputAdornment>
+    ),
+  }}
+/>
 
-            <TextField
-              fullWidth
-              label="Confirmar contraseña"
-              name="contrasenaConfirm"
-              type="contrasena"
-              value={formData.contrasenaConfirm}
-              onChange={handleChange}
-              margin="normal"
-              required
-              autoComplete="new-contrasena"
-              error={Boolean(errors.contrasenaConfirm)}
-              helperText={errors.contrasenaConfirm}
-              placeholder="Repite tu contraseña"
-            />
+<TextField
+  fullWidth
+  label="Confirmar contraseña"
+  name="contrasenaConfirm"
+  type={showPassword ? "text" : "password"}
+  value={formData.contrasenaConfirm}
+  onChange={handleChange}
+  margin="normal"
+  required
+  autoComplete="new-password"
+  error={Boolean(errors.contrasenaConfirm)}
+  helperText={errors.contrasenaConfirm}
+  placeholder="Repite tu contraseña"
+  InputProps={{
+    endAdornment: (
+      <InputAdornment position="end">
+        <IconButton onClick={handleTogglePassword} edge="end">
+          {showPassword ? <VisibilityOff /> : <Visibility />}
+        </IconButton>
+      </InputAdornment>
+    ),
+  }}
+/>
 
+            
             <Button
               type="submit"
               fullWidth
@@ -240,6 +271,25 @@ const RegistroPage = () => {
             >
               Registrarse
             </Button>
+            <Typography
+  variant="body2"
+  align="center"
+  sx={{ mt: 2, cursor: 'pointer', color: '#ef6c00' }}
+>
+  ¿Ya tienes una cuenta?{' '}
+  <Link href="/auth/login" passHref>
+    <Box
+      component="a"
+      sx={{
+        fontWeight: 'bold',
+        textDecoration: 'underline',
+        color: 'inherit',
+      }}
+    >
+      Inicia sesión aquí
+    </Box>
+  </Link>
+</Typography>
           </Box>
         </Paper>
       </Container>
