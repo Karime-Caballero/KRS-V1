@@ -1,174 +1,555 @@
 'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Container,
-  Typography,
-  Paper,
   TextField,
-  MenuItem,
+  Typography,
+  Container,
+  Paper,
   Button,
   Chip,
-  Autocomplete,
-  Stack,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  Grid,
+  Snackbar,
+  Alert,
+  Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  IconButton,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { amber, orange, yellow } from '@mui/material/colors';
+import { SelectChangeEvent } from '@mui/material/Select';
+import { useRouter } from 'next/navigation';
+import CloseIcon from '@mui/icons-material/Close';
 
-const dietas = [
-  'Omnívora',
-  'Vegetariana',
-  'Vegana',
-  'Keto',
-  'Sin gluten',
-  'Paleo',
-  'Ayuno intermitente',
-];
 
-const alergiasComunes = [
-  'Gluten',
-  'Lácteos',
-  'Frutos secos',
-  'Mariscos',
-  'Huevos',
-  'Soya',
-  'Ninguna',
-];
+const alergiasBase = ['Gluten', 'Lácteos', 'Frutos secos', 'Mariscos', 'Soja', 'Otra'];
+const unidades = ['gramos', 'ml', 'piezas', 'cucharadas', 'tazas'];
+const categorias = ['Cereal', 'Lácteos', 'Frutas', 'Verduras', 'Carnes', 'Otros'];
+const almacenamientos = ['Refrigerado', 'Congelado', 'Despensa', 'Otro'];
 
-const PerfilPage = () => {
-  const [ingredientesCasa, setIngredientesCasa] = useState<string[]>([]);
+interface Ingrediente {
+  nombre: string;
+  cantidad: number;
+  unidad: string;
+  categoria: string;
+  almacenamiento: string;
+}
+
+const PerfilAlimenticio = () => {
   const [alergias, setAlergias] = useState<string[]>([]);
+  const [mostrarOtraAlergia, setMostrarOtraAlergia] = useState(false);
+  const [otraAlergia, setOtraAlergia] = useState('');
+  const [objetivo, setObjetivo] = useState('');
+
+  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
+  const [nombre, setNombre] = useState('');
+  const [cantidad, setCantidad] = useState('');
+  const [unidad, setUnidad] = useState('');
+  const [categoria, setCategoria] = useState('');
+  const [almacenamiento, setAlmacenamiento] = useState('');
+  const [errors, setErrors] = useState({ nombre: false, cantidad: false });
+
+  const [editMode, setEditMode] = useState(false);
+
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('perfilAlimenticio');
+    if (saved) {
+      const datos = JSON.parse(saved);
+      setAlergias(datos.alergias || []);
+      setObjetivo(datos.objetivoNutricional || '');
+      setIngredientes(datos.ingredientesCasa || []);
+    }
+  }, []);
+
+ const handleAlergiasChange = (event: SelectChangeEvent<string[]>) => {
+  const selected = event.target.value as string[];
+
+  if (selected.includes('Otra') && !alergias.includes('Otra')) {
+    setMostrarOtraAlergia(true);
+  }
+
+  if (!selected.includes('Otra')) {
+    setMostrarOtraAlergia(false);
+    setOtraAlergia('');
+  }
+
+  setAlergias(selected.filter((a) => a !== 'Otra'));
+};
+
+
+  const agregarOtraAlergia = () => {
+    const nueva = otraAlergia.trim();
+    if (nueva && !alergias.includes(nueva) && !alergiasBase.includes(nueva)) {
+      setAlergias([...alergias, nueva]);
+      setOtraAlergia('');
+      setMostrarOtraAlergia(false);
+    }
+  };
+
+  const agregarIngrediente = () => {
+    const errores = {
+      nombre: !nombre.trim(),
+      cantidad: isNaN(Number(cantidad)) || Number(cantidad) <= 0,
+    };
+    setErrors(errores);
+
+    if (Object.values(errores).some(Boolean)) {
+      setSnackbar({
+        open: true,
+        message: 'Corrige los errores antes de continuar.',
+        severity: 'warning',
+      });
+      return;
+    }
+
+    setIngredientes([
+      ...ingredientes,
+      {
+        nombre: nombre.trim(),
+        cantidad: Number(cantidad),
+        unidad,
+        categoria,
+        almacenamiento,
+      },
+    ]);
+
+    setNombre('');
+    setCantidad('');
+    setUnidad('');
+    setCategoria('');
+    setAlmacenamiento('');
+  };
+
+  const eliminarIngrediente = (index: number) => {
+    const copia = [...ingredientes];
+    copia.splice(index, 1);
+    setIngredientes(copia);
+  };
+
+ const actualizarIngrediente = (
+  index: number,
+  campo: keyof Ingrediente,
+  valor: string | number
+) => {
+  const copia = [...ingredientes];
+
+  if (campo === 'cantidad') {
+    const num = Number(valor);
+    if (isNaN(num) || num <= 0) {
+      setSnackbar({
+        open: true,
+        message: 'Cantidad inválida. Debe ser un número positivo.',
+        severity: 'warning',
+      });
+      return;
+    }
+    copia[index][campo] = num;
+  } else if (campo === 'nombre' || campo === 'unidad') {
+    copia[index][campo] = valor as string;
+  }
+
+  setIngredientes(copia);
+};
+
+
+  const descargarPerfil = () => {
+    const datos = {
+      alergias,
+      objetivoNutricional: objetivo,
+      ingredientesCasa: ingredientes,
+    };
+    const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'perfil_alimenticio.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSubmit = async () => {
+    const datosPerfil = {
+      alergias,
+      objetivoNutricional: objetivo,
+      ingredientesCasa: ingredientes,
+    };
+
+    try {
+      localStorage.setItem('perfilAlimenticio', JSON.stringify(datosPerfil));
+
+      // Aquí iría el fetch si tienes backend
+      // const response = await fetch('', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datosPerfil) });
+      // if (!response.ok) throw new Error('Error al guardar en el backend');
+      // const data = await response.json();
+
+      setSnackbar({
+        open: true,
+        message: `Perfil guardado correctamente.`,
+        severity: 'success',
+      });
+      setEditMode(false);
+    } catch (error) {
+      console.error(error);
+      setSnackbar({ open: true, message: 'Error al guardar el perfil.', severity: 'error' });
+    }
+  };
+
+  const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        background: 'linear-gradient(to right, #f9f9f9, #fdf6e3)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        py: 6,
-        px: 2,
-      }}
-    >
-      <Container maxWidth="md">
-        <Paper
-          elevation={4}
+    <Container maxWidth={false}  sx={{ width: '100vw', height: '100vh', p: 1, m: 0.5 }}>
+      <Paper
+        elevation={6}
+        sx={{
+          p: 4,
+          borderRadius: 4,
+          bgcolor: amber[50],
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+        }}
+      >
+        <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ color: orange[700] }}>
+          Perfil Alimenticio
+        </Typography>
+
+        <Divider sx={{ my: 3 }} />
+
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Alergias</InputLabel>
+          <Select
+            multiple
+            value={[...alergias, ...(mostrarOtraAlergia ? ['Otra'] : [])]}
+            onChange={handleAlergiasChange}
+            renderValue={(selected) => (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {selected.map((value) => (
+                  <Chip key={value} label={value} color="warning" />
+                ))}
+              </Box>
+            )}
+            disabled={editMode}
+          >
+            {alergiasBase.map((alergia) => (
+              <MenuItem key={alergia} value={alergia}>
+                {alergia}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {mostrarOtraAlergia && !editMode && (
+          <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
+            <Grid item xs={9}>
+              <TextField
+                fullWidth
+                label="Especificar otra alergia"
+                value={otraAlergia}
+                onChange={(e) => setOtraAlergia(e.target.value)}
+                disabled={editMode}
+              />
+            </Grid>
+            <Grid item xs={3}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={agregarOtraAlergia}
+                sx={{ bgcolor: orange[500], '&:hover': { bgcolor: orange[600] } }}
+                disabled={editMode}
+              >
+                Agregar
+              </Button>
+            </Grid>
+          </Grid>
+        )}
+
+        <TextField
+          fullWidth
+          margin="normal"
+          label="Objetivo Nutricional"
+          value={objetivo}
+          onChange={(e) => setObjetivo(e.target.value)}
+          disabled={editMode}
+        />
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="h6" gutterBottom fontWeight="medium" sx={{ color: orange[800] }}>
+          Ingredientes en casa
+        </Typography>
+
+        {!editMode && (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Nombre"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                error={errors.nombre}
+                helperText={errors.nombre ? 'Nombre requerido' : ''}
+                fullWidth
+                disabled={editMode}
+              />
+            </Grid>
+
+            <Grid item xs={2} sm={2} sx={{ width: 200 }}>
+              <TextField
+                label="Cantidad"
+                type="number"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
+                error={errors.cantidad}
+                helperText={errors.cantidad ? 'Cantidad inválida' : ''}
+                fullWidth
+                disabled={editMode}
+              />
+            </Grid>
+            <Grid item xs={2} sm={2} sx={{ width: 200 }}>
+              <FormControl fullWidth disabled={editMode}>
+                <InputLabel>Unidad</InputLabel>
+                <Select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+                  {unidades.map((u) => (
+                    <MenuItem key={u} value={u}>
+                      {u}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+           <Grid item xs={2} sm={2} sx={{ width: 200 }}>
+              <FormControl fullWidth disabled={editMode}>
+                <InputLabel>Categoría</InputLabel>
+                <Select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                  {categorias.map((c) => (
+                    <MenuItem key={c} value={c}>
+                      {c}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={2} sm={2} sx={{ width: 200 }}>
+              <FormControl fullWidth disabled={editMode}>
+                <InputLabel>Almacenamiento</InputLabel>
+                <Select value={almacenamiento} onChange={(e) => setAlmacenamiento(e.target.value)}>
+                  {almacenamientos.map((a) => (
+                    <MenuItem key={a} value={a}>
+                      {a}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={agregarIngrediente}
+                sx={{ bgcolor: orange[600], '&:hover': { bgcolor: orange[700] } }}
+              >
+                Agregar Ingrediente
+              </Button>
+            </Grid>
+          </Grid>
+        )}
+
+        {ingredientes.length > 0 && (
+          <Table sx={{ mt: 3, borderRadius: 2, overflow: 'hidden' }}>
+            <TableHead sx={{ bgcolor: orange[100] }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 'bold', color: orange[800] }}>Nombre</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: orange[800] }}>Cantidad</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: orange[800] }}>Unidad</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: orange[800] }}>Categoría</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: orange[800] }}>Almacenamiento</TableCell>
+                {editMode && <TableCell sx={{ fontWeight: 'bold', color: orange[800] }}>Acciones</TableCell>}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {ingredientes.map((ing, idx) => (
+                <TableRow key={idx}>
+                  <TableCell>
+                    {editMode ? (
+                      <TextField
+                        variant="standard"
+                        value={ing.nombre}
+                        onChange={(e) => actualizarIngrediente(idx, 'nombre', e.target.value)}
+                        fullWidth
+                        sx={{ input: { color: orange[900], fontWeight: 'medium' } }}
+                      />
+                    ) : (
+                      ing.nombre
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editMode ? (
+                      <TextField
+                        variant="standard"
+                        type="number"
+                        value={ing.cantidad}
+                        onChange={(e) => actualizarIngrediente(idx, 'cantidad', e.target.value)}
+                        fullWidth
+                        sx={{ input: { color: orange[900], fontWeight: 'medium' } }}
+                      />
+                    ) : (
+                      ing.cantidad
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editMode ? (
+                      <Select
+                        variant="standard"
+                        value={ing.unidad}
+                        onChange={(e) => actualizarIngrediente(idx, 'unidad', e.target.value)}
+                        fullWidth
+                        sx={{ color: orange[900], fontWeight: 'medium' }}
+                      >
+                        {unidades.map((u) => (
+                          <MenuItem key={u} value={u}>
+                            {u}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    ) : (
+                      ing.unidad
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editMode ? (
+                      <Select
+                        variant="standard"
+                        value={ing.categoria}
+                        onChange={(e) => actualizarIngrediente(idx, 'categoria', e.target.value)}
+                        fullWidth
+                        sx={{ color: orange[900], fontWeight: 'medium' }}
+                      >
+                        {categorias.map((c) => (
+                          <MenuItem key={c} value={c}>
+                            {c}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    ) : (
+                      ing.categoria
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editMode ? (
+                      <Select
+                        variant="standard"
+                        value={ing.almacenamiento}
+                        onChange={(e) => actualizarIngrediente(idx, 'almacenamiento', e.target.value)}
+                        fullWidth
+                        sx={{ color: orange[900], fontWeight: 'medium' }}
+                      >
+                        {almacenamientos.map((a) => (
+                          <MenuItem key={a} value={a}>
+                            {a}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    ) : (
+                      ing.almacenamiento
+                    )}
+                  </TableCell>
+                  {editMode && (
+                    <TableCell>
+                      <IconButton color="error" onClick={() => eliminarIngrediente(idx)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+
+        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          {editMode ? (
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              sx={{
+                bgcolor: yellow[800],
+                color: '#fff',
+                '&:hover': {
+                  bgcolor: yellow[900],
+                },
+              }}
+            >
+              Guardar
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={() => setEditMode(true)}
+              sx={{
+                bgcolor: orange[600],
+                color: '#fff',
+                '&:hover': {
+                  bgcolor: orange[700],
+                },
+              }}
+            >
+              Editar
+            </Button>
+          )}
+
+          <Button
+            variant="outlined"
+            onClick={descargarPerfil}
+            sx={{
+              borderColor: orange[400],
+              color: orange[600],
+              '&:hover': {
+                bgcolor: orange[50],
+                borderColor: orange[600],
+              },
+            }}
+          >
+            Descargar JSON
+          </Button>
+        </Box>
+      </Paper>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity={snackbar.severity as any}
+          onClose={handleCloseSnackbar}
+          variant="filled"
           sx={{
-            p: 5,
-            borderRadius: 4,
-            bgcolor: 'white',
+            bgcolor:
+              snackbar.severity === 'success'
+                ? yellow[700]
+                : snackbar.severity === 'warning'
+                ? orange[500]
+                : '#d32f2f',
           }}
         >
-          <Typography variant="h4" align="center" gutterBottom>
-            Configuración Inicial del Perfil
-          </Typography>
-          <Typography variant="subtitle1" align="center" sx={{ mb: 4 }}>
-            Cuéntanos sobre tus preferencias para ofrecerte menús personalizados
-          </Typography>
-
-          <Box component="form" noValidate autoComplete="off">
-            <TextField
-              select
-              fullWidth
-              label="Tipo de dieta"
-              margin="normal"
-              defaultValue=""
-              required
-            >
-              {dietas.map((dieta) => (
-                <MenuItem key={dieta} value={dieta}>
-                  {dieta}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <Autocomplete
-              multiple
-              freeSolo
-              options={alergiasComunes}
-              value={alergias}
-              onChange={(event, newValue) => setAlergias(newValue)}
-              renderTags={(value: string[], getTagProps) =>
-                value.map((option: string, index: number) => (
-                  <Chip
-                    variant="outlined"
-                    color="error"
-                    label={option}
-                    {...getTagProps({ index })}
-                    key={index}
-                  />
-                ))
-              }
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  variant="outlined"
-                  label="Alergias alimentarias"
-                  placeholder="Escribe y presiona Enter"
-                  margin="normal"
-                />
-              )}
-            />
-
-            <TextField
-              fullWidth
-              label="Objetivo nutricional"
-              placeholder="Ejemplo: Bajar de peso, mantener masa muscular..."
-              margin="normal"
-              required
-            />
-
-            <Autocomplete
-              multiple
-              freeSolo
-              options={[]}
-              value={ingredientesCasa}
-              onChange={(event, newValue) => setIngredientesCasa(newValue)}
-              renderTags={(value: string[], getTagProps) =>
-                value.map((option: string, index: number) => (
-                  <Chip
-                    variant="outlined"
-                    color="primary"
-                    label={option}
-                    {...getTagProps({ index })}
-                    key={index}
-                  />
-                ))
-              }
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  variant="outlined"
-                  label="10 ingredientes que sueles tener en casa"
-                  placeholder="Ej: Arroz, pollo, lentejas..."
-                  margin="normal"
-                />
-              )}
-            />
-
-            <Stack direction="row" justifyContent="center" mt={4}>
-              <Button
-                type="submit"
-                variant="contained"
-                sx={{
-                  px: 5,
-                  py: 1.5,
-                  fontWeight: 'bold',
-                  bgcolor: '#FFB300',
-                  color: '#000',
-                  '&:hover': {
-                    bgcolor: '#FFA000',
-                  },
-                }}
-              >
-                Guardar perfil
-              </Button>
-            </Stack>
-          </Box>
-        </Paper>
-      </Container>
-    </Box>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Container>
   );
 };
 
-export default PerfilPage;
+export default PerfilAlimenticio;
