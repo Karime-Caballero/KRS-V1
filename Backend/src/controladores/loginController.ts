@@ -186,6 +186,7 @@ class LoginController {
 
             const result = await usuariosCollection.insertOne(nuevoUsuario);
 
+
             // Sanitizar los datos de respuesta por precaución
             res.status(201).json({
                 success: true,
