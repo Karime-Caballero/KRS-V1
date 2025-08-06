@@ -200,31 +200,72 @@ const PerfilAlimenticio = () => {
   };
 
   const handleSubmit = async () => {
-    const datosPerfil = {
-      alergias,
-      objetivoNutricional: objetivo,
-      ingredientesCasa: ingredientes,
-      dietas,
-      ingredientesEvitar,
-      tiempoMaximoPreparacion,
-    };
-
-    try {
-      localStorage.setItem('perfilAlimenticio', JSON.stringify(datosPerfil));
-
-      // Si tienes backend, aquí puedes agregar fetch para enviar datos
-
-      setSnackbar({
-        open: true,
-        message: `Perfil guardado correctamente.`,
-        severity: 'success',
-      });
-      setEditMode(false);
-    } catch (error) {
-      console.error(error);
-      setSnackbar({ open: true, message: 'Error al guardar el perfil.', severity: 'error' });
-    }
+  const datosPerfil = {
+    dietas,
+    alergias,
+    ingredientes_evitados: ingredientesEvitar
+      .split(',')
+      .map((i) => i.trim())
+      .filter(Boolean),
+    tiempo_max_preparacion: Number(tiempoMaximoPreparacion) || 0
   };
+
+  try {
+     const userId = JSON.parse(localStorage.getItem('user') || '{}')._id;
+
+    const response = await fetch(`http://localhost:4000/users/${userId}/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(datosPerfil)
+    });
+
+    if (!response.ok) throw new Error('Error al guardar en el backend');
+
+    const result = await response.json();
+    console.log(result);
+
+    setSnackbar({
+      open: true,
+      message: `Preferencias guardadas correctamente.`,
+      severity: 'success'
+    });
+
+    setEditMode(false);
+  } catch (error) {
+    console.error(error);
+    setSnackbar({ open: true, message: 'Error al guardar las preferencias.', severity: 'error' });
+  }
+};
+
+
+  // const handleSubmit = async () => {
+  //   const datosPerfil = {
+  //     alergias,
+  //     objetivoNutricional: objetivo,
+  //     ingredientesCasa: ingredientes,
+  //     dietas,
+  //     ingredientesEvitar,
+  //     tiempoMaximoPreparacion,
+  //   };
+
+  //   try {
+  //     localStorage.setItem('perfilAlimenticio', JSON.stringify(datosPerfil));
+
+  //     // Si tienes backend, aquí puedes agregar fetch para enviar datos
+
+  //     setSnackbar({
+  //       open: true,
+  //       message: `Perfil guardado correctamente.`,
+  //       severity: 'success',
+  //     });
+  //     setEditMode(false);
+  //   } catch (error) {
+  //     console.error(error);
+  //     setSnackbar({ open: true, message: 'Error al guardar el perfil.', severity: 'error' });
+  //   }
+  // };
 
   const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
