@@ -223,8 +223,32 @@ const PerfilAlimenticio = () => {
 
     if (!response.ok) throw new Error('Error al guardar en el backend');
 
-    const result = await response.json();
-    console.log(result);
+    const ingredientesAEnviar = ingredientes.map((ing) => ({
+      nombre: ing.nombre,
+      cantidad: ing.cantidad,
+      unidad: ing.unidad,
+      categoria: ing.categoria,
+      almacenamiento: ing.almacenamiento,
+      fecha_actualizacion: new Date().toISOString(),
+    }));
+
+    console.log('Ingredientes a enviar:', ingredientesAEnviar);
+
+    const ingredientesResponse = await fetch(`http://localhost:4000/users/${userId}/pantry`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(ingredientesAEnviar),
+    });
+
+    if (!ingredientesResponse.ok) throw new Error('Error al guardar los ingredientes');
+
+    setSnackbar({
+      open: true,
+      message: 'Perfil y alimentos guardados correctamente.',
+      severity: 'success',
+    });
 
     setSnackbar({
       open: true,
