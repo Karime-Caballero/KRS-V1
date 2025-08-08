@@ -59,8 +59,8 @@ export default function UserHome() {
               href: '/cuenta',
             },
             {
-              title: 'Explorar Recetas',
-              description: 'Descubre nuevas recetas saludables para probar.',
+              title: 'Historial de resetas',
+              description: 'Vuelve a recrear tus recetas favoritas de la semana pasada.',
               icon: <FastfoodIcon sx={{ fontSize: 50, color: '#EF6C00' }} />,
               href: '/recetas',
             },

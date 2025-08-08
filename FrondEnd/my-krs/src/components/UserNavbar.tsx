@@ -80,14 +80,14 @@ export default function UserNavbar() {
         <Box sx={{ display: 'flex', gap: 3 }}>
           <Button
             color="inherit"
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/user/home')}
             sx={{ fontWeight: 'bold' }}
           >
             Inicio
           </Button>
           <Button
             color="inherit"
-            onClick={() => router.push('/planes')}
+            onClick={() => router.push('/user/planSemanal')}
             sx={{ fontWeight: 'bold' }}
           >
             Planes
