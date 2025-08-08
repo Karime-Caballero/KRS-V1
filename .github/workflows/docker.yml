@@ -1,0 +1,28 @@
+name: Docker Karime
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar el repositorio
+        uses: actions/checkout@v3
+
+      - name: Construir imagen Docker
+        run: docker build -t react-ghpages .
+
+      - name: Extraer el build del contenedor
+        run: |
+          CONTAINER_ID=$(docker create react-ghpages)
+          docker cp $CONTAINER_ID:/app/build ./build
+          docker rm $CONTAINER_ID
+
+      - name: Publicar en GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build
