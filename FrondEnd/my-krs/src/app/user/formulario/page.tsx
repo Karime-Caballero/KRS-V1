@@ -44,6 +44,7 @@ const opcionesDietas = [
 ];
 
 interface Ingrediente {
+  ingrediente_id: string;
   nombre: string;
   cantidad: number;
   unidad: string;
@@ -72,20 +73,45 @@ const PerfilAlimenticio = () => {
 
   const [editMode, setEditMode] = useState(false);
 
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'warning' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
-    const saved = localStorage.getItem('perfilAlimenticio');
-    if (saved) {
-      const datos = JSON.parse(saved);
-      setAlergias(datos.alergias || []);
-      setObjetivo(datos.objetivoNutricional || '');
-      setIngredientes(datos.ingredientesCasa || []);
-      setDietas(datos.dietas || []);
-      setIngredientesEvitar(datos.ingredientesEvitar || '');
-      setTiempoMaximoPreparacion(datos.tiempoMaximoPreparacion || '');
-    }
+    const fetchDatosUsuario = async () => {
+      try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const userId = user._id;
+
+        // Obtener perfil alimenticio
+        const resPerfil = await fetch(`http://localhost:4000/users/${userId}/preferencias`);
+        if (!resPerfil.ok) throw new Error('No se pudo obtener el perfil');
+        const perfil = await resPerfil.json();
+        const preferencias = perfil.data?.preferencias;
+
+        setAlergias(preferencias?.alergias || []);
+        setObjetivo(preferencias?.objetivoNutricional || '');
+        setDietas(preferencias?.dietas || []);
+        setIngredientesEvitar((preferencias?.ingredientes_evitados || []).join(', '));
+        setTiempoMaximoPreparacion(preferencias?.tiempo_max_preparacion?.toString() || '');
+
+        // Obtener ingredientes en casa
+        const resIngredientes = await fetch(`http://localhost:4000/users/${userId}/pantry`);
+        if (!resIngredientes.ok) throw new Error('No se pudo obtener los ingredientes');
+
+        const ingredientesData = await resIngredientes.json();
+        console.log('Respuesta del backend:', ingredientesData);
+
+        setIngredientes(Array.isArray(ingredientesData.data?.pantry) ? ingredientesData.data.pantry : []);
+
+
+      } catch (error) {
+        console.error('Error al cargar datos del usuario:', error);
+        setSnackbar({ open: true, message: 'Error al cargar datos.', severity: 'error' });
+      }
+    };
+
+    fetchDatosUsuario();
   }, []);
+
 
   const handleAlergiasChange = (event: SelectChangeEvent<string[]>) => {
     const selected = event.target.value as string[];
@@ -127,9 +153,24 @@ const PerfilAlimenticio = () => {
       return;
     }
 
+    // Verificar si ya existe el ingrediente (por nombre)
+    const existe = ingredientes.some(
+      (ing) => ing.nombre.toLowerCase() === nombre.trim().toLowerCase()
+    );
+
+    if (existe) {
+      setSnackbar({
+        open: true,
+        message: 'Este ingrediente ya está agregado.',
+        severity: 'warning',
+      });
+      return; // no agregamos duplicado
+    }
+
     setIngredientes([
       ...ingredientes,
       {
+        ingrediente_id: crypto.randomUUID(), // ID único para frontend
         nombre: nombre.trim(),
         cantidad: Number(cantidad),
         unidad,
@@ -145,11 +186,44 @@ const PerfilAlimenticio = () => {
     setAlmacenamiento('');
   };
 
-  const eliminarIngrediente = (index: number) => {
-    const copia = [...ingredientes];
-    copia.splice(index, 1);
-    setIngredientes(copia);
+  const eliminarIngrediente = async (index: number) => {
+    const userId = JSON.parse(localStorage.getItem('user') || '{}')._id;
+    const ingredienteAEliminar = ingredientes[index];
+    const ingredienteId = ingredienteAEliminar.ingrediente_id;
+
+    try {
+      const res = await fetch(`http://localhost:4000/users/${userId}/pantry/${ingredienteId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Error al eliminar el ingrediente');
+      }
+
+      // Solo si el backend responde con éxito, lo eliminamos del estado local
+      const copia = [...ingredientes];
+      copia.splice(index, 1);
+      setIngredientes(copia);
+
+      // Snackbar o mensaje de éxito
+      setSnackbar({
+        open: true,
+        message: 'Ingrediente eliminado correctamente.',
+        severity: 'success',
+      });
+
+    } catch (error) {
+      console.error('Error al eliminar ingrediente:', error);
+      setSnackbar({
+        open: true,
+        message: 'No se pudo eliminar el ingrediente.',
+        severity: 'error',
+      });
+    }
   };
+
 
   const actualizarIngrediente = (
     index: number,
@@ -200,96 +274,70 @@ const PerfilAlimenticio = () => {
   };
 
   const handleSubmit = async () => {
-  const datosPerfil = {
-    dietas,
-    alergias,
-    ingredientes_evitados: ingredientesEvitar
-      .split(',')
-      .map((i) => i.trim())
-      .filter(Boolean),
-    tiempo_max_preparacion: Number(tiempoMaximoPreparacion) || 0
+    const datosPerfil = {
+      dietas,
+      alergias,
+      ingredientes_evitados: ingredientesEvitar
+        .split(',')
+        .map((i) => i.trim())
+        .filter(Boolean),
+      tiempo_max_preparacion: Number(tiempoMaximoPreparacion) || 0
+    };
+
+    try {
+      const userId = JSON.parse(localStorage.getItem('user') || '{}')._id;
+
+      // Guardar perfil
+      const response = await fetch(`http://localhost:4000/users/${userId}/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(datosPerfil)
+      });
+
+      if (!response.ok) throw new Error('Error al guardar en el backend');
+
+      // FILTRAR INGREDIENTES DUPLICADOS POR NOMBRE
+      const ingredientesUnicos = ingredientes.reduce((acc: Ingrediente[], actual) => {
+        const existe = acc.find(
+          (ing) => ing.nombre.trim().toLowerCase() === actual.nombre.trim().toLowerCase()
+        );
+        if (!existe) acc.push(actual);
+        return acc;
+      }, []);
+
+      const ingredientesAEnviar = ingredientesUnicos.map((ing) => ({
+        nombre: ing.nombre,
+        cantidad: ing.cantidad,
+        unidad: ing.unidad,
+        categoria: ing.categoria,
+        almacenamiento: ing.almacenamiento,
+        fecha_actualizacion: new Date().toISOString(),
+      }));
+
+      const ingredientesResponse = await fetch(`http://localhost:4000/users/${userId}/pantry`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(ingredientesAEnviar),
+      });
+
+      if (!ingredientesResponse.ok) throw new Error('Error al guardar los ingredientes');
+
+      setSnackbar({
+        open: true,
+        message: 'Perfil y alimentos guardados correctamente.',
+        severity: 'success',
+      });
+
+      setEditMode(false);
+    } catch (error) {
+      console.error(error);
+      setSnackbar({ open: true, message: 'Error al guardar las preferencias.', severity: 'error' });
+    }
   };
-
-  try {
-     const userId = JSON.parse(localStorage.getItem('user') || '{}')._id;
-
-    const response = await fetch(`http://localhost:4000/users/${userId}/profile`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(datosPerfil)
-    });
-
-    if (!response.ok) throw new Error('Error al guardar en el backend');
-
-    const ingredientesAEnviar = ingredientes.map((ing) => ({
-      nombre: ing.nombre,
-      cantidad: ing.cantidad,
-      unidad: ing.unidad,
-      categoria: ing.categoria,
-      almacenamiento: ing.almacenamiento,
-      fecha_actualizacion: new Date().toISOString(),
-    }));
-
-    console.log('Ingredientes a enviar:', ingredientesAEnviar);
-
-    const ingredientesResponse = await fetch(`http://localhost:4000/users/${userId}/pantry`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(ingredientesAEnviar),
-    });
-
-    if (!ingredientesResponse.ok) throw new Error('Error al guardar los ingredientes');
-
-    setSnackbar({
-      open: true,
-      message: 'Perfil y alimentos guardados correctamente.',
-      severity: 'success',
-    });
-
-    setSnackbar({
-      open: true,
-      message: `Preferencias guardadas correctamente.`,
-      severity: 'success'
-    });
-
-    setEditMode(false);
-  } catch (error) {
-    console.error(error);
-    setSnackbar({ open: true, message: 'Error al guardar las preferencias.', severity: 'error' });
-  }
-};
-
-
-  // const handleSubmit = async () => {
-  //   const datosPerfil = {
-  //     alergias,
-  //     objetivoNutricional: objetivo,
-  //     ingredientesCasa: ingredientes,
-  //     dietas,
-  //     ingredientesEvitar,
-  //     tiempoMaximoPreparacion,
-  //   };
-
-  //   try {
-  //     localStorage.setItem('perfilAlimenticio', JSON.stringify(datosPerfil));
-
-  //     // Si tienes backend, aquí puedes agregar fetch para enviar datos
-
-  //     setSnackbar({
-  //       open: true,
-  //       message: `Perfil guardado correctamente.`,
-  //       severity: 'success',
-  //     });
-  //     setEditMode(false);
-  //   } catch (error) {
-  //     console.error(error);
-  //     setSnackbar({ open: true, message: 'Error al guardar el perfil.', severity: 'error' });
-  //   }
-  // };
 
   const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
@@ -311,52 +359,54 @@ const PerfilAlimenticio = () => {
         <Divider sx={{ my: 3 }} />
 
         <FormControl fullWidth margin="normal">
-  <InputLabel>Alergias</InputLabel>
-  <Select
-    multiple
-    value={[...alergias, ...(mostrarOtraAlergia ? ['Otra'] : [])]}
-    onChange={handleAlergiasChange}
-    renderValue={(selected) => (
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-        {(selected as string[]).map((value) => (
-          <Chip key={value} label={value} color="warning" />
-        ))}
-      </Box>
-    )}
-    disabled={!editMode} // cambiar aquí para que habilite solo en modo edición
-  >
-    {alergiasBase.map((alergia) => (
-      <MenuItem key={alergia} value={alergia}>
-        {alergia}
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
+          <InputLabel>Alergias</InputLabel>
+          <Select
+            multiple
+            value={[...alergias, ...(mostrarOtraAlergia ? ['Otra'] : [])]}
+            onChange={handleAlergiasChange}
+            renderValue={(selected) => (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {(selected as string[]).map((value) => (
+                  <Chip key={value} label={value} color="warning" />
+                ))}
+              </Box>
+            )}
+            disabled={!editMode} // cambiar aquí para que habilite solo en modo edición
+          >
+            {alergiasBase.map((alergia) => (
+              <MenuItem key={alergia} value={alergia}>
+                {alergia}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
-{mostrarOtraAlergia && editMode && (  // mostrar solo si está en modo edición
-  <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
-    <Grid item xs={9}>
-      <TextField
-        fullWidth
-        label="Especificar otra alergia"
-        value={otraAlergia}
-        onChange={(e) => setOtraAlergia(e.target.value)}
-        disabled={!editMode} // habilitar solo en modo edición
-      />
-    </Grid>
-    <Grid item xs={3}>
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={agregarOtraAlergia}
-        sx={{ bgcolor: orange[500], '&:hover': { bgcolor: orange[600] } }}
-        disabled={!editMode} // habilitar solo en modo edición
-      >
-        Agregar
-      </Button>
-    </Grid>
-  </Grid>
-)}
+        {mostrarOtraAlergia && editMode && (  // mostrar solo si está en modo edición
+          <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
+            {/* @ts-expect-error MUI typing issue */}
+            <Grid item xs={9}>
+              <TextField
+                fullWidth
+                label="Especificar otra alergia"
+                value={otraAlergia}
+                onChange={(e) => setOtraAlergia(e.target.value)}
+                disabled={!editMode} // habilitar solo en modo edición
+              />
+            </Grid>
+            {/* @ts-expect-error MUI typing issue */}
+            <Grid item xs={3}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={agregarOtraAlergia}
+                sx={{ bgcolor: orange[500], '&:hover': { bgcolor: orange[600] } }}
+                disabled={!editMode} // habilitar solo en modo edición
+              >
+                Agregar
+              </Button>
+            </Grid>
+          </Grid>
+        )}
 
         {/* NUEVOS CAMPOS */}
         <FormControl fullWidth margin="normal">
@@ -403,6 +453,7 @@ const PerfilAlimenticio = () => {
 
         {!editMode && (
           <Grid container spacing={2}>
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={12} sm={3}>
               <TextField
                 label="Nombre"
@@ -414,7 +465,7 @@ const PerfilAlimenticio = () => {
                 disabled={editMode}
               />
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <TextField
                 label="Cantidad"
@@ -427,6 +478,7 @@ const PerfilAlimenticio = () => {
                 disabled={editMode}
               />
             </Grid>
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Unidad</InputLabel>
@@ -439,7 +491,7 @@ const PerfilAlimenticio = () => {
                 </Select>
               </FormControl>
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Categoría</InputLabel>
@@ -452,7 +504,7 @@ const PerfilAlimenticio = () => {
                 </Select>
               </FormControl>
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Almacenamiento</InputLabel>
@@ -465,7 +517,7 @@ const PerfilAlimenticio = () => {
                 </Select>
               </FormControl>
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={12}>
               <Button
                 fullWidth

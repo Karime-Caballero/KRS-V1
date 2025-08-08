@@ -574,12 +574,38 @@ class UsuariosController {
             });
         }
 
+
         if (ingredientesValidos.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: 'No hay ingredientes válidos para agregar'
             });
         }
+            const inputData = req.body;
+            const isArray = Array.isArray(inputData);
+            const ingredientesToAdd = isArray ? inputData : [inputData];
+
+            const nuevosIngredientes: InventarioItem[] = [];
+            const errors: string[] = [];
+
+            for (const [index, item] of ingredientesToAdd.entries()) {
+                // Crear ingrediente nuevo, forzando ObjectId para ingrediente_id
+                const ingredienteData: InventarioItem = {
+                    ingrediente_id: item.ingrediente_id && ObjectId.isValid(item.ingrediente_id)
+                        ? new ObjectId(item.ingrediente_id)
+                        : new ObjectId(),
+                    ...sanitizeInput(item),
+                    fecha_actualizacion: item.fecha_actualizacion
+                        ? new Date(item.fecha_actualizacion)
+                        : new Date()
+                } as InventarioItem;
+
+                // Validaciones
+                if (!ingredienteData.nombre) {
+                    errors.push(`Ingrediente en posición ${index + 1} no tiene nombre`);
+                    continue;
+                }
+           
 
         // Operaciones con base de datos
         const db = getDb();
@@ -658,6 +684,32 @@ private sanitizeInput(input: any): any {
                 continue;
             }
 
+            // Buscar usuario
+            const usuario = await usuariosCollection.findOne({ _id: new ObjectId(_id) });
+            if (!usuario) {
+                res.status(404).json({
+                    success: false,
+                    message: 'Usuario no encontrado'
+                });
+                return;
+            }
+
+            // Si no tiene inventario, crear array vacío para agregar
+            const inventarioActual = Array.isArray(usuario.inventario) ? usuario.inventario : [];
+            const nuevoInventario = [...inventarioActual, ...nuevosIngredientes];
+
+            // Actualizar inventario en la base de datos
+            const result = await usuariosCollection.updateOne(
+                { _id: new ObjectId(_id) },
+                {
+                    $set: {
+                        inventario: nuevoInventario,
+                        fecha_actualizacion: new Date()
+                    }
+                }
+            );
+
+
             if (!ingrediente.categoria) {
                 errores.push(`Ingrediente '${ingrediente.nombre}' no tiene categoría`);
                 continue;
@@ -685,6 +737,7 @@ private sanitizeInput(input: any): any {
                 : new Date()
         };
     }
+
 
     public async updateInventarioItem(req: Request, res: Response): Promise<void> {
         try {

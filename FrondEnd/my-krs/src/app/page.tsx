@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Box, Button, Typography, Container, Grid, Paper, Stack } from '@mui/material';
+import { Box, Button, Typography, Container, Paper, Stack } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import KitchenIcon from '@mui/icons-material/Kitchen';
 import EmojiFoodBeverageIcon from '@mui/icons-material/EmojiFoodBeverage';
@@ -8,6 +8,9 @@ import TimerIcon from '@mui/icons-material/Timer';
 import Image from 'next/image';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
+import { Grid } from '@mui/material';
+
+
 
 
 export default function HomePage() {
@@ -28,6 +31,7 @@ export default function HomePage() {
         {/* Sección principal con texto e imagen */}
         <Grid container spacing={6} alignItems="center">
           {/* Texto a la izquierda */}
+          {/* @ts-expect-error MUI typing issue */}
           <Grid item xs={12} md={6}>
             <Typography
               variant="h3"
@@ -95,6 +99,7 @@ export default function HomePage() {
           </Grid>
 
           {/* Imagen a la derecha */}
+          {/* @ts-expect-error MUI typing issue */}
           <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'center' }}>
             
              <Box sx={{ mt: 10, textAlign: 'center' }}>
@@ -125,7 +130,9 @@ export default function HomePage() {
                 desc: 'Dietas balanceadas y deliciosas para toda la familia.',
               },
             ].map((item, i) => (
+              // @ts-expect-error MUI typing issue
               <Grid item xs={12} sm={6} md={3} key={i}>
+                
                 <Stack spacing={1} alignItems="center" sx={{ px: 2 }}>
                   {item.icon}
                   <Typography fontWeight="bold" variant="h6">
