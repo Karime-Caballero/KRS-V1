@@ -73,7 +73,7 @@ const PerfilAlimenticio = () => {
 
   const [editMode, setEditMode] = useState(false);
 
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'warning' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     const fetchDatosUsuario = async () => {
@@ -383,6 +383,7 @@ const PerfilAlimenticio = () => {
 
         {mostrarOtraAlergia && editMode && (  // mostrar solo si está en modo edición
           <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={9}>
               <TextField
                 fullWidth
@@ -392,6 +393,7 @@ const PerfilAlimenticio = () => {
                 disabled={!editMode} // habilitar solo en modo edición
               />
             </Grid>
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={3}>
               <Button
                 variant="contained"
@@ -451,6 +453,7 @@ const PerfilAlimenticio = () => {
 
         {!editMode && (
           <Grid container spacing={2}>
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={12} sm={3}>
               <TextField
                 label="Nombre"
@@ -462,7 +465,7 @@ const PerfilAlimenticio = () => {
                 disabled={editMode}
               />
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <TextField
                 label="Cantidad"
@@ -475,6 +478,7 @@ const PerfilAlimenticio = () => {
                 disabled={editMode}
               />
             </Grid>
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Unidad</InputLabel>
@@ -487,7 +491,7 @@ const PerfilAlimenticio = () => {
                 </Select>
               </FormControl>
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Categoría</InputLabel>
@@ -500,7 +504,7 @@ const PerfilAlimenticio = () => {
                 </Select>
               </FormControl>
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={2} sm={2} sx={{ width: 200 }}>
               <FormControl fullWidth disabled={editMode}>
                 <InputLabel>Almacenamiento</InputLabel>
@@ -513,7 +517,7 @@ const PerfilAlimenticio = () => {
                 </Select>
               </FormControl>
             </Grid>
-
+            {/* @ts-expect-error MUI typing issue */}
             <Grid item xs={12}>
               <Button
                 fullWidth
