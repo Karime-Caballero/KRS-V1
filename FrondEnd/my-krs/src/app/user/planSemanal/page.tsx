@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -33,27 +33,126 @@ export default function Planificador() {
   const [menu, setMenu] = useState<Meal[] | null>(null);
   const [menuGuardado, setMenuGuardado] = useState(false);
 
-  const fetchMenuDesdeAPI = async (): Promise<Meal[]> => {
+  const fetchMenuDesdeAPI = async (): Promise<string | null> => {
     try {
-      const res = await fetch('/api/menu', {
+      const userId = JSON.parse(localStorage.getItem('user') || '{}')._id;
+      const res = await fetch(`http://localhost:4000/plans/${userId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaInicio }),
+        body: JSON.stringify({
+          dias: 7,
+          fecha_inicio: fechaInicio?.toISOString(),
+        }),
       });
+
       const data = await res.json();
-      return data.menu;
+
+      if (!res.ok) {
+        console.error('Error generando plan:', data.message);
+        return null;
+      }
+
+      return data.data.plan_id;
     } catch (error) {
       console.error('Error al obtener el menú:', error);
-      return [];
+      return null;
     }
   };
 
+  const fetchPlanPorId = async (planId: string) => {
+    try {
+      const res = await fetch(`http://localhost:4000/plans/${planId}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error('Error al obtener el plan:', data.message);
+        return null;
+      }
+
+      return data.data;
+    } catch (error) {
+      console.error('Error al hacer la petición:', error);
+      return null;
+    }
+  };
+
+  const esperarPlanFinalizado = async (
+    planId: string,
+    maxIntentos = 10,
+    intervalo = 10000
+  ): Promise<any | null> => {
+    await new Promise(res => setTimeout(res, intervalo));  // Espera 10s antes de la primera consulta
+    for (let i = 0; i < maxIntentos; i++) {
+      const plan = await fetchPlanPorId(planId);
+      if (plan && plan.estado === 'finalizado') {
+        return plan;
+      }
+      await new Promise(res => setTimeout(res, intervalo));
+    }
+    console.error('No se obtuvo un plan finalizado en el tiempo esperado');
+    return null;
+  };
+
+
   const handleGenerarMenu = async () => {
     if (!fechaInicio) return;
-    const menuAPI = await fetchMenuDesdeAPI();
-    setMenu(menuAPI);
+
+    const planId = await fetchMenuDesdeAPI();
+    if (!planId) return;
+
+    const planFinalizado = await esperarPlanFinalizado(planId);
+    if (!planFinalizado) return;
+
+    const menuFormateado: Meal[] = planFinalizado.dias.map((dia: any) => {
+      const meal: any = {};
+
+      dia.comidas.forEach((comida: any) => {
+        // Mapear tipo de comida backend a tipo que espera frontend
+        let tipoFront = '';
+        if (comida.tipo === 'breakfast') tipoFront = 'desayuno';
+        else if (comida.tipo === 'lunch') tipoFront = 'comida';
+        else if (comida.tipo === 'dinner') tipoFront = 'cena';
+        else tipoFront = comida.tipo; // por si hay otro tipo inesperado
+
+        meal[tipoFront] = {
+          titulo: comida.nombre_receta,
+          ingredientes: comida.ingredientes_faltantes
+            ?.map((ing: any) => `${ing.nombre} (${ing.cantidad} ${ing.unidad})`)
+            .join(', '),
+          tiempo: 'No especificado',
+          procedimiento: 'No especificado',
+        };
+      });
+
+      // Asegurar que desayuno, comida y cena existan para evitar errores
+      return {
+        desayuno: meal.desayuno || {
+          titulo: 'No asignado',
+          ingredientes: '',
+          tiempo: '',
+          procedimiento: '',
+        },
+        comida: meal.comida || {
+          titulo: 'No asignado',
+          ingredientes: '',
+          tiempo: '',
+          procedimiento: '',
+        },
+        cena: meal.cena || {
+          titulo: 'No asignado',
+          ingredientes: '',
+          tiempo: '',
+          procedimiento: '',
+        },
+      };
+    });
+
+
+    setMenu(menuFormateado);
+    setFechaInicio(new Date(planFinalizado.semana.fecha_inicio));
     setMenuGuardado(false);
   };
+
 
   const handleGuardar = () => {
     setMenuGuardado(true);
@@ -67,7 +166,7 @@ export default function Planificador() {
     doc.setTextColor('#e65100');
     doc.text('Planificador Semanal de Comidas', 14, 20);
 
-    let y = 30; // posición vertical inicial
+    let y = 30;
 
     menu.forEach((diaMenu, index) => {
       const nombreDia = diasSemana[index];
@@ -117,9 +216,9 @@ export default function Planificador() {
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box sx={{ backgroundColor: '#fffbe6', minHeight: '100vh', pb: 8 }}>
-        <Container maxWidth="m" sx={{ pt: 8 }}>
+        <Container maxWidth="md" sx={{ pt: 8 }}>
           <Typography variant="h4" gutterBottom color="orange" align="center">
-            Planificador Semanal de Comidas 
+            Planificador Semanal de Comidas
           </Typography>
 
           <Paper elevation={2} sx={{ p: 3, mb: 4, backgroundColor: '#fff3e0', borderRadius: 3 }}>
@@ -143,7 +242,7 @@ export default function Planificador() {
         </Container>
 
         {!menu ? (
-          <Container maxWidth="m">
+          <Container maxWidth="md">
             <Paper
               elevation={1}
               sx={{
@@ -190,25 +289,7 @@ export default function Planificador() {
                       >
                         <Typography variant="h6" sx={{ color: '#e65100' }}>
                           {tipo[0].toUpperCase() + tipo.slice(1)}: {receta?.titulo || 'No asignado'}
-                // @ts-expect-error MUI typing issue
-                <Grid item xs={12} md={6} lg={4} key={dia}>
-                  <Box
-                    sx={{
-                      backgroundColor: '#fff3e0',
-                      padding: 2,
-                      borderRadius: 2,
-                      boxShadow: 1,
-                    }}
-                  >
-                    <Typography variant="h6" color="orange">{dia}</Typography>
-                    <Divider sx={{ my: 1 }} />
-                    {(['desayuno', 'comida', 'cena'] as (keyof Meal)[]).map((tipo) => (
-                      <Box key={tipo} sx={{ mb: 2 }}>
-                        <Typography sx={{ fontWeight: 'bold' }}>
-                          {tipo[0].toUpperCase() + tipo.slice(1)}:
                         </Typography>
-
-                        <Divider sx={{ my: 1 }} />
 
                         <Typography sx={{ fontWeight: 'bold', mt: 1 }}>🧂 Ingredientes:</Typography>
                         <Typography>{receta?.ingredientes || 'No especificado'}</Typography>
@@ -237,10 +318,10 @@ export default function Planificador() {
               }}
             >
               <Button variant="contained" color="success" size="large" onClick={handleGuardar}>
-                Aceptar y guardar menú 
+                Aceptar y guardar menú
               </Button>
               <Button variant="outlined" color="primary" size="large" onClick={handleImprimir}>
-                Descargar PDF 
+                Descargar PDF
               </Button>
             </Box>
 

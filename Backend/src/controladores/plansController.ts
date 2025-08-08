@@ -92,7 +92,7 @@ class PlansController {
     private pointsUsedToday = 0;
     private lastResetTime = new Date();
     private MAX_POINTS_PER_PLAN = 30;
-    private REQUIRED_API_RECIPES = 14; // 2 comidas x 7 días
+    private REQUIRED_API_RECIPES = 21; // 3 comidas x 7 días (ahora incluye breakfast)
 
     constructor() {
         this.processPlanInBackground = this.processPlanInBackground.bind(this);
@@ -127,7 +127,7 @@ class PlansController {
     public async generatePlan(req: Request, res: Response): Promise<Response> {
         try {
             const { _id } = req.params;
-            const { dias = 7 } = req.body;
+            const { dias = 7, fecha_inicio } = req.body;
 
             if (!_id || !ObjectId.isValid(_id)) {
                 return res.status(400).json({
@@ -153,8 +153,8 @@ class PlansController {
                 });
             }
 
-            const fechaInicio = new Date();
-            const fechaFin = new Date();
+            const fechaInicio = fecha_inicio ? new Date(fecha_inicio) : new Date();
+            const fechaFin = new Date(fechaInicio);
             fechaFin.setDate(fechaInicio.getDate() + dias - 1);
 
             const newPlan = {
@@ -196,25 +196,43 @@ class PlansController {
 
     public async getPlan(req: Request, res: Response): Promise<void> {
         try {
-            const { plan_id } = req.params;
+            const { plan_id } = req.params;  // Cambiamos a plan_id en lugar de _id
 
             if (!plan_id || !ObjectId.isValid(plan_id)) {
-                res.status(400).json({ success: false, message: 'Se requiere un plan_id válido' });
+                res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un ID de plan válido'
+                });
                 return;
             }
 
             const db = getDb();
-            const plan = await db.collection<PlanSemanal>('planes_semanales').findOne({ _id: new ObjectId(plan_id) });
+
+            // Busca el plan específico por su ID
+            const plan = await db.collection<PlanSemanal>('planes_semanales')
+                .findOne({
+                    _id: new ObjectId(plan_id),
+                    estado: 'finalizado'  // Solo planes finalizados
+                });
 
             if (!plan) {
-                res.status(404).json({ success: false, message: 'Plan no encontrado' });
+                res.status(404).json({
+                    success: false,
+                    message: 'No se encontró el plan o no está finalizado'
+                });
                 return;
             }
 
-            res.status(200).json({ success: true, data: plan });
+            res.status(200).json({
+                success: true,
+                data: plan
+            });
         } catch (error: any) {
             console.error('Error al obtener plan:', error);
-            res.status(500).json({ success: false, message: error.message || 'Error desconocido' });
+            res.status(500).json({
+                success: false,
+                message: 'Error al obtener el plan'
+            });
         }
     }
 
@@ -289,13 +307,13 @@ class PlansController {
             }
         }
 
-        // 3. Distribuir recetas en los días
+        // 3. Distribuir recetas en los días (ahora con breakfast, lunch y dinner)
         let current = new Date(startDate);
         let recipeIndex = 0;
 
         while (current <= endDate && recipeIndex < recipesWithDetails.length) {
             const comidas = [];
-            const mealTypes = ['lunch', 'dinner'];
+            const mealTypes = ['breakfast', 'lunch', 'dinner']; // Ahora incluye breakfast
 
             for (const tipo of mealTypes) {
                 if (recipeIndex >= recipesWithDetails.length) break;
@@ -339,17 +357,36 @@ class PlansController {
             };
         }
 
-        const searchParams = this.buildSearchParams(usuario);
-        searchParams.number = this.REQUIRED_API_RECIPES;
+        // Primero obtenemos recetas de desayuno (7)
+        const breakfastRecipes = await this.getBreakfastRecipes(usuario);
+        // Luego obtenemos recetas para lunch y dinner (14)
+        const lunchDinnerRecipes = await this.getLunchDinnerRecipes(usuario);
 
-        const estimatedPoints = 5 + (this.REQUIRED_API_RECIPES * 0.5);
+        const allRecipes = [...breakfastRecipes.recipes, ...lunchDinnerRecipes.recipes];
+        const totalPoints = breakfastRecipes.pointsUsed + lunchDinnerRecipes.pointsUsed;
+
+        recipeCache.set(cacheKey, allRecipes);
+
+        return {
+            recipes: allRecipes,
+            pointsUsed: totalPoints
+        };
+    }
+
+    private async getBreakfastRecipes(
+        usuario: Usuario
+    ): Promise<{ recipes: RecetaDetalle[]; pointsUsed: number }> {
+        const searchParams = this.buildSearchParams(usuario, 'breakfast');
+        searchParams.number = 7; // 7 desayunos, uno por día
+
+        const estimatedPoints = 5 + (7 * 0.5);
 
         if (!await this.trackApiCall(estimatedPoints)) {
-            throw new Error('No hay puntos suficientes para obtener recetas para la semana completa');
+            throw new Error('No hay puntos suficientes para obtener recetas de desayuno');
         }
 
         try {
-            console.log(`Obteniendo ${this.REQUIRED_API_RECIPES} recetas de la API para semana completa`);
+            console.log(`Obteniendo 7 recetas de desayuno de la API`);
             const res = await axios.get(`${this.SPOONACULAR_BASE_URL}/complexSearch`, {
                 params: searchParams
             });
@@ -374,19 +411,77 @@ class PlansController {
                 analyzedInstructions: []
             }));
 
-            recipeCache.set(cacheKey, recipes);
+            return {
+                recipes,
+                pointsUsed: estimatedPoints
+            };
+        } catch (error: any) {
+            console.error('Error obteniendo recetas de desayuno:', error.response?.data || error.message);
+            // Fallback a recetas locales
+            const fallbackRecipes = Array(7).fill(null).map(() => this.getLocalFallbackRecipe('breakfast'));
+            return {
+                recipes: fallbackRecipes,
+                pointsUsed: 0
+            };
+        }
+    }
+
+    private async getLunchDinnerRecipes(
+        usuario: Usuario
+    ): Promise<{ recipes: RecetaDetalle[]; pointsUsed: number }> {
+        const searchParams = this.buildSearchParams(usuario, 'lunch');
+        searchParams.number = 14; // 14 recetas (7 lunch + 7 dinner)
+
+        const estimatedPoints = 5 + (14 * 0.5);
+
+        if (!await this.trackApiCall(estimatedPoints)) {
+            throw new Error('No hay puntos suficientes para obtener recetas de almuerzo y cena');
+        }
+
+        try {
+            console.log(`Obteniendo 14 recetas de almuerzo/cena de la API`);
+            const res = await axios.get(`${this.SPOONACULAR_BASE_URL}/complexSearch`, {
+                params: searchParams
+            });
+
+            const recipes: RecetaDetalle[] = res.data.results.map((r: any) => ({
+                id: r.id,
+                title: r.title,
+                image: r.image || '',
+                readyInMinutes: r.readyInMinutes,
+                servings: r.servings,
+                sourceUrl: r.sourceUrl,
+                vegetarian: r.vegetarian,
+                vegan: r.vegan,
+                glutenFree: r.glutenFree,
+                dairyFree: r.dairyFree,
+                extendedIngredients: r.missedIngredients?.concat(r.usedIngredients)?.map((ing: any) => ({
+                    name: ing.name,
+                    amount: ing.amount,
+                    unit: ing.unit
+                })) || [],
+                instructions: r.instructions || 'No hay instrucciones disponibles',
+                analyzedInstructions: []
+            }));
 
             return {
                 recipes,
                 pointsUsed: estimatedPoints
             };
         } catch (error: any) {
-            console.error('Error obteniendo recetas para semana completa:', error.response?.data || error.message);
-            throw new Error('Error al obtener recetas de la API');
+            console.error('Error obteniendo recetas de almuerzo/cena:', error.response?.data || error.message);
+            // Fallback a recetas locales
+            const fallbackRecipes = Array(14).fill(null).map((_, i) =>
+                this.getLocalFallbackRecipe(i % 2 === 0 ? 'lunch' : 'dinner')
+            );
+            return {
+                recipes: fallbackRecipes,
+                pointsUsed: 0
+            };
         }
     }
 
-    private buildSearchParams(usuario: Usuario): any {
+    private buildSearchParams(usuario: Usuario, mealType?: string): any {
         const params: any = {
             addRecipeInformation: true,
             fillIngredients: true,
@@ -394,6 +489,16 @@ class PlansController {
             apiKey: this.SPOONACULAR_API_KEY,
             timeout: 5000
         };
+
+        if (mealType) {
+            params.type = mealType;
+        }
+
+        // Configuraciones específicas para desayunos
+        if (mealType === 'breakfast') {
+            params.maxReadyTime = Math.min(30, usuario.preferencias_alimentarias?.tiempo_max_preparacion || 30);
+            params.tags = 'easy,quick,breakfast';
+        }
 
         // Dietas y alergias
         if (usuario.preferencias_alimentarias?.dietas?.length) {
@@ -416,8 +521,8 @@ class PlansController {
             params.excludeIngredients = usuario.preferencias_alimentarias.ingredientes_evitados.join(',');
         }
 
-        // Tiempo de preparación
-        if (usuario.preferencias_alimentarias?.tiempo_max_preparacion) {
+        // Tiempo de preparación (solo si no es breakfast)
+        if (!mealType && usuario.preferencias_alimentarias?.tiempo_max_preparacion) {
             params.maxReadyTime = usuario.preferencias_alimentarias.tiempo_max_preparacion;
         }
 
@@ -425,7 +530,7 @@ class PlansController {
         if (usuario.preferencias_alimentarias?.metodos_preparacion_preferidos?.length) {
             const methodTags = usuario.preferencias_alimentarias.metodos_preparacion_preferidos
                 .map((m: string) => m.toLowerCase().replace(/\s+/g, '-'));
-            params.tags = methodTags.join(',');
+            params.tags = params.tags ? `${params.tags},${methodTags.join(',')}` : methodTags.join(',');
         }
 
         // Nutrición
@@ -466,7 +571,6 @@ class PlansController {
         ingredientes: { nombre: string, cantidad: number, unidad: string }[]
     ) {
         ingredientes.forEach(newIng => {
-            // Normaliza el nombre (sin espacios extras, lowercase) y verifica unidad
             const normalizedNombre = newIng.nombre.trim().toLowerCase();
             const existingItem = lista.find(item =>
                 item.nombre.trim().toLowerCase() === normalizedNombre &&
@@ -474,10 +578,8 @@ class PlansController {
             );
 
             if (existingItem) {
-                // Suma la cantidad si ya existe un ítem idéntico
                 existingItem.cantidad += newIng.cantidad;
             } else {
-                // Agrega un nuevo ítem si no existe
                 lista.push({
                     nombre: newIng.nombre,
                     cantidad: newIng.cantidad,
@@ -499,7 +601,7 @@ class PlansController {
         }
 
         try {
-            if (!await this.trackApiCall(1)) { // 1 punto por consulta de detalle
+            if (!await this.trackApiCall(1)) {
                 throw new Error('Límite de puntos alcanzado para consultar receta');
             }
 
@@ -554,7 +656,6 @@ class PlansController {
             return recipeData;
         } catch (error: any) {
             console.error(`Error al obtener receta ${recipeId}:`, error.message);
-            // Fallback a receta local si hay error
             const mealType = recipeId % 2 === 0 ? 'lunch' : 'dinner';
             const fallbackRecipe = this.getLocalFallbackRecipe(mealType);
             recipeDetailCache.set(cacheKey, fallbackRecipe);
@@ -574,6 +675,52 @@ class PlansController {
 
     private getLocalFallbackRecipe(tipo: string): RecetaDetalle {
         const fallbackRecipes = {
+            breakfast: [
+                {
+                    id: -3001,
+                    title: "Avena con Frutas y Nueces",
+                    image: "",
+                    readyInMinutes: 10,
+                    servings: 2,
+                    sourceUrl: "",
+                    vegetarian: true,
+                    vegan: true,
+                    glutenFree: true,
+                    dairyFree: true,
+                    extendedIngredients: [
+                        { name: "avena", amount: 1, unit: "cup" },
+                        { name: "leche de almendras", amount: 2, unit: "cups" },
+                        { name: "plátano", amount: 1, unit: "medium" },
+                        { name: "nueces", amount: 0.25, unit: "cup" },
+                        { name: "miel", amount: 2, unit: "tablespoons" }
+                    ],
+                    analyzedInstructions: [
+                        {
+                            name: "",
+                            steps: [
+                                {
+                                    number: 1,
+                                    step: "Calentar la leche de almendras en una olla pequeña",
+                                    ingredients: [
+                                        { id: -1, name: "leche de almendras", localizedName: "leche de almendras", image: "almond-milk.png" }
+                                    ],
+                                    equipment: [
+                                        { id: -1, name: "olla pequeña", localizedName: "olla pequeña", image: "sauce-pan.png" }
+                                    ]
+                                },
+                                {
+                                    number: 2,
+                                    step: "Agregar la avena y cocinar a fuego medio durante 5 minutos",
+                                    ingredients: [
+                                        { id: -2, name: "avena", localizedName: "avena", image: "oats.png" }
+                                    ],
+                                    equipment: []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
             lunch: [
                 {
                     id: -1001,
@@ -675,9 +822,8 @@ class PlansController {
     public async updateShoppingListItems(req: Request, res: Response): Promise<Response> {
         try {
             const { plan_id } = req.params;
-            const { items } = req.body; // Array de items con su estado {nombre, comprado}
+            const { items } = req.body;
 
-            // Validaciones básicas
             if (!plan_id || !ObjectId.isValid(plan_id)) {
                 return res.status(400).json({
                     success: false,
@@ -694,7 +840,6 @@ class PlansController {
 
             const db = getDb();
 
-            // 1. Obtener el plan completo
             const plan = await db.collection<PlanSemanal>('planes_semanales').findOne(
                 { _id: new ObjectId(plan_id) },
                 { projection: { usuario_id: 1, lista_compras: 1 } }
@@ -707,10 +852,8 @@ class PlansController {
                 });
             }
 
-            // 2. Normalizar nombres para comparación (evitar diferencias por mayúsculas/espacios)
             const normalizeName = (name: string) => name.trim().toLowerCase();
 
-            // 3. Preparar operaciones de actualización
             const bulkUpdates = [];
             const itemsParaInventario = [];
             const itemsNoEncontrados = [];
@@ -722,12 +865,11 @@ class PlansController {
                 );
 
                 if (itemOriginal) {
-                    // Preparar actualización para este item
                     bulkUpdates.push({
                         updateOne: {
                             filter: {
                                 _id: new ObjectId(plan_id),
-                                'lista_compras.nombre': itemOriginal.nombre // Buscar por nombre exacto original
+                                'lista_compras.nombre': itemOriginal.nombre
                             },
                             update: {
                                 $set: {
@@ -738,11 +880,10 @@ class PlansController {
                         }
                     });
 
-                    // Si está marcado como comprado, agregar al inventario
                     if (itemUpdate.comprado) {
                         itemsParaInventario.push({
                             ingrediente_id: new ObjectId(),
-                            nombre: itemOriginal.nombre, // Mantener el nombre original
+                            nombre: itemOriginal.nombre,
                             cantidad: itemOriginal.cantidad,
                             unidad: itemOriginal.unidad,
                             categoria: itemOriginal.categoria || 'otros',
@@ -755,29 +896,25 @@ class PlansController {
                 }
             }
 
-            // 4. Ejecutar actualizaciones si hay items válidos
             if (bulkUpdates.length > 0) {
                 await db.collection('planes_semanales').bulkWrite(bulkUpdates);
             }
 
-            // 5. Agregar items comprados al inventario
             if (itemsParaInventario.length > 0) {
                 try {
                     await db.collection('usuarios').updateOne(
                         { _id: plan.usuario_id },
                         {
-                            // @ts-ignore - Solución temporal para el tipo
+                            // @ts-ignore
                             $push: { inventario: { $each: itemsParaInventario } },
                             $set: { fecha_actualizacion: new Date() }
                         }
                     );
                 } catch (error) {
                     console.error('Error al actualizar inventario:', error);
-                    // No fallar la operación completa por esto
                 }
             }
 
-            // 6. Preparar respuesta
             const response: any = {
                 success: true,
                 message: 'Operación completada',
@@ -803,7 +940,6 @@ class PlansController {
         }
     }
 
-    // Obtiene la lista de compras de un plan específico
     public async getShoppingList(req: Request, res: Response): Promise<Response> {
         try {
             const { plan_id } = req.params;
@@ -817,7 +953,6 @@ class PlansController {
 
             const db = getDb();
 
-            // Obtener solo la lista de compras del plan
             const plan = await db.collection<PlanSemanal>('planes_semanales').findOne(
                 { _id: new ObjectId(plan_id) },
                 { projection: { lista_compras: 1, usuario_id: 1 } }
