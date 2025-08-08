@@ -10,34 +10,42 @@ import bodyParser from 'body-parser';
 
 class Server {
     public app: Application;
+    private dbConnected: boolean = false;
 
     constructor() {
         this.app = express();
         this.config();
-        this.database();
-        this.routes();
+        this.routes(); // Las rutas pueden definirse sincrónicamente
     }
 
-    config(): void {
+    private config(): void {
         this.app.set('port', process.env.PORT || 4000);
         this.app.use(morgan('dev'));
         this.app.use(cors());
         this.app.use(express.json({ limit: '10mb' }));
     }
 
-    async database(): Promise<void> {
+    public async connectDatabase(): Promise<void> {
         try {
             await connectToMongo();
+            this.dbConnected = true;
+            console.log('Conexión a MongoDB establecida');
         } catch (error) {
-            const err = error as Error;
-            console.error('Database connection error:', err.message);
-            process.exit(1);
+            console.error('Error al conectar a MongoDB:', error);
+            throw error; // Permite manejar el error externamente
         }
     }
 
-    routes(): void {
-        // Health check endpoint
+    private routes(): void {
+        // Health check mejorado que verifica la conexión a DB
         this.app.get('/health', async (req, res) => {
+            if (!this.dbConnected) {
+                return res.status(500).json({ 
+                    status: 'ERROR', 
+                    message: 'Database not connected' 
+                });
+            }
+
             try {
                 const mongoDb = getDb();
                 await mongoDb.command({ ping: 1 });
@@ -46,10 +54,9 @@ class Server {
                     database: 'MongoDB connected'
                 });
             } catch (error) {
-                const err = error as Error;
                 res.status(500).json({ 
                     status: 'ERROR',
-                    error: err.message 
+                    error: error instanceof Error ? error.message : 'Unknown error'
                 });
             }
         });
@@ -60,18 +67,35 @@ class Server {
         this.app.use('/plans', plansRoutes);
     }
 
-    start(): void {
+    public start(): void {
+        if (!this.dbConnected) {
+            console.error('Error: La base de datos no está conectada');
+            process.exit(1);
+        }
+
         this.app.listen(this.app.get('port'), () => {
             console.log(`Servidor corriendo en http://localhost:${this.app.get('port')}`);
         });
     }
 }
 
-const server = new Server();
-server.start();
+// Uso modificado pero similar al original
+(async () => {
+    const server = new Server();
+    
+    try {
+        await server.connectDatabase();
+        server.start();
+        
+        // Manejo de cierre limpio
+        process.on('SIGINT', async () => {
+            console.log('\nCerrando conexiones...');
+            await closeConnection();
+            process.exit(0);
+        });
 
-// Manejo de cierre limpio
-process.on('SIGINT', async () => {
-    await closeConnection();
-    process.exit(0);
-});
+    } catch (error) {
+        console.error('No se pudo iniciar el servidor:', error);
+        process.exit(1);
+    }
+})();
