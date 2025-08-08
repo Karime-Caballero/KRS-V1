@@ -71,7 +71,6 @@ const LoginPage = () => {
         },
         body: JSON.stringify(formData),
       });
-      console.log('Enviando datos:', formData);
 
       if (!response.ok) {
         const errorResult = await response.json();
@@ -79,7 +78,6 @@ const LoginPage = () => {
       }
 
       const result = await response.json();
-      console.log('Respuesta backend:', result);
 
       localStorage.setItem('token', result.data.accessToken);
       localStorage.setItem('user', JSON.stringify(result.data.user));

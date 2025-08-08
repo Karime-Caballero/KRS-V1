@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  frontend:
+    build: ./FrondEnd/my-krs
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+
+  backend:
+    build: ./Backend
+    ports:
+      - "4000:4000"
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/midb
+      - PORT=4000
+
+  mongo:
+    image: mongo:6
+    container_name: mongo_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:

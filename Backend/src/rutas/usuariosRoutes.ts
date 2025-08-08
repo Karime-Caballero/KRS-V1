@@ -16,6 +16,7 @@ class UsuariosRoutes {
         this.router.delete('/:_id', usuariosController.delete);
 
         // Rutas para preferencias
+        this.router.get('/:_id/preferencias', usuariosController.obtenerPreferenciasAlimentarias);
         this.router.put('/:_id/profile', usuariosController.guardarPreferenciasAlimentarias);
 
         // Rutas para el inventario

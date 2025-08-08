@@ -106,15 +106,25 @@ class LoginController {
             securityConfig.jwt.secret,
             {
                 algorithm: securityConfig.jwt.algorithm,
-                expiresIn: 604800, // 7 días en segundos
+                expiresIn: 604800, // 7 days in seconds
                 issuer: securityConfig.jwt.issuer
             }
         );
     }
 
+    private validateAndCreateObjectId(id: string): ObjectId | null {
+        if (!ObjectId.isValid(id)) {
+            return null;
+        }
+        try {
+            return new ObjectId(id);
+        } catch {
+            return null;
+        }
+    }
+
     public async create(req: Request, res: Response): Promise<void> {
         try {
-            // Sanitizar todo el cuerpo de la petición
             const sanitizedBody = this.sanitizeObject(req.body);
             const { nombre, email, contrasena } = sanitizedBody;
 
@@ -146,7 +156,6 @@ class LoginController {
             const db = getDb();
             const usuariosCollection = db.collection<Usuario>('usuarios');
 
-            // Sanitizar el email antes de la consulta
             const usuarioExistente = await usuariosCollection.findOne({
                 email: this.sanitizeObject(email)
             });
@@ -166,8 +175,8 @@ class LoginController {
                 _id: new ObjectId(),
                 nombre: nombre ? this.sanitizeObject(nombre) : '',
                 email: this.sanitizeObject(email),
-                contrasena: this.sanitizeObject(contrasena), // Contraseña sin encriptar (sanitizada)
-                contrasena_enc: contrasenaEnc, // Contraseña encriptada (no necesita sanitización)
+                contrasena: this.sanitizeObject(contrasena),
+                contrasena_enc: contrasenaEnc,
                 rol: 'usuario',
                 estatus: true,
                 refreshTokens: [],
@@ -186,7 +195,6 @@ class LoginController {
 
             const result = await usuariosCollection.insertOne(nuevoUsuario);
 
-            // Sanitizar los datos de respuesta por precaución
             res.status(201).json({
                 success: true,
                 data: {
@@ -210,10 +218,6 @@ class LoginController {
     }
 
     public async login(req: Request, res: Response): Promise<void> {
-
-         console.log("📥 Se llamó al endpoint /login");
-
-         
         try {
             const email = xss(req.body.email);
             const contrasena = xss(req.body.contrasena);
@@ -239,12 +243,9 @@ class LoginController {
                 return;
             }
 
-
-            console.log(`🔐 Usuario logueado: ${user.email} | ID: ${user._id.toString()}`);
             const accessToken = this.generateAccessToken(user);
             const refreshToken = this.generateRefreshToken(user);
 
-            // Corrección: Usar $addToSet para evitar duplicados
             await usersCollection.updateOne(
                 { _id: user._id },
                 { $addToSet: { refreshTokens: refreshToken } }
@@ -271,7 +272,6 @@ class LoginController {
                     }
                 }
             });
-
         } catch (error) {
             console.error('Error en login:', error);
             res.status(500).json({
@@ -290,22 +290,24 @@ class LoginController {
                 return;
             }
 
+            const decoded = jwt.verify(refreshToken, securityConfig.jwt.secret) as JwtPayload;
+            const userId = this.validateAndCreateObjectId(decoded.userId);
+            
+            if (!userId) {
+                res.status(400).json({ success: false, message: "ID de usuario inválido" });
+                return;
+            }
+
             const db = getDb();
             const usersCollection = db.collection<Usuario>('usuarios');
 
-            const decoded = jwt.verify(refreshToken, securityConfig.jwt.secret) as JwtPayload;
-
             await usersCollection.updateOne(
-                { _id: new ObjectId(decoded.userId) },
+                { _id: userId },
                 { $pull: { refreshTokens: refreshToken } }
             );
 
             res.clearCookie('refreshToken');
-
-            res.json({
-                success: true,
-                message: "Sesión cerrada correctamente"
-            });
+            res.json({ success: true, message: "Sesión cerrada correctamente" });
         } catch (error) {
             console.error('Error en logout:', error);
             res.status(500).json({
@@ -324,13 +326,19 @@ class LoginController {
                 return;
             }
 
+            const decoded = jwt.verify(refreshToken, securityConfig.jwt.secret) as JwtPayload;
+            const userId = this.validateAndCreateObjectId(decoded.userId);
+            
+            if (!userId) {
+                res.status(400).json({ success: false, message: "ID de usuario inválido" });
+                return;
+            }
+
             const db = getDb();
             const usersCollection = db.collection<Usuario>('usuarios');
 
-            const decoded = jwt.verify(refreshToken, securityConfig.jwt.secret) as JwtPayload;
-
             const user = await usersCollection.findOne({
-                _id: new ObjectId(decoded.userId),
+                _id: userId,
                 refreshTokens: refreshToken
             });
 
@@ -342,9 +350,8 @@ class LoginController {
             const newAccessToken = this.generateAccessToken(user);
             const newRefreshToken = this.generateRefreshToken(user);
 
-            // Corrección: Usar operaciones atómicas para actualizar
             await usersCollection.updateOne(
-                { _id: user._id },
+                { _id: userId },
                 {
                     $pull: { refreshTokens: refreshToken },
                     $addToSet: { refreshTokens: newRefreshToken }
@@ -366,10 +373,8 @@ class LoginController {
                     refreshToken: newRefreshToken
                 }
             });
-
         } catch (error) {
             console.error('Error al refrescar token:', error);
-
             if (error instanceof jwt.TokenExpiredError) {
                 res.status(401).json({ success: false, message: "Token de refresco expirado" });
             } else if (error instanceof jwt.JsonWebTokenError) {

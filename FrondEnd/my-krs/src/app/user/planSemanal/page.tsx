@@ -190,6 +190,22 @@ export default function Planificador() {
                       >
                         <Typography variant="h6" sx={{ color: '#e65100' }}>
                           {tipo[0].toUpperCase() + tipo.slice(1)}: {receta?.titulo || 'No asignado'}
+                // @ts-expect-error MUI typing issue
+                <Grid item xs={12} md={6} lg={4} key={dia}>
+                  <Box
+                    sx={{
+                      backgroundColor: '#fff3e0',
+                      padding: 2,
+                      borderRadius: 2,
+                      boxShadow: 1,
+                    }}
+                  >
+                    <Typography variant="h6" color="orange">{dia}</Typography>
+                    <Divider sx={{ my: 1 }} />
+                    {(['desayuno', 'comida', 'cena'] as (keyof Meal)[]).map((tipo) => (
+                      <Box key={tipo} sx={{ mb: 2 }}>
+                        <Typography sx={{ fontWeight: 'bold' }}>
+                          {tipo[0].toUpperCase() + tipo.slice(1)}:
                         </Typography>
 
                         <Divider sx={{ my: 1 }} />
