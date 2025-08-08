@@ -526,14 +526,9 @@ class UsuariosController {
             }
 
             // Ordenar el inventario por fecha de actualización (más reciente primero)
-            // Solución segura que no genera errores:
-            const inventarioOrdenado = usuario?.inventario
-                ? [...usuario.inventario].sort((a: InventarioItem, b: InventarioItem) => {
-                    const fechaA = new Date(a.fecha_actualizacion).getTime();
-                    const fechaB = new Date(b.fecha_actualizacion).getTime();
-                    return fechaB - fechaA; // Orden descendente
-                })
-                : [];
+            const inventarioOrdenado = usuario.inventario?.sort((a, b) =>
+                new Date(b.fecha_actualizacion).getTime() - new Date(a.fecha_actualizacion).getTime()
+            ) || [];
 
             res.status(200).json({
                 success: true,
@@ -553,138 +548,94 @@ class UsuariosController {
         }
     }
 
-    public async addIngredienteInventario(req: Request, res: Response): Promise<Response> {
-    try {
-        const { _id } = req.params;
-        if (!_id || !ObjectId.isValid(_id)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Se requiere un _id válido del usuario'
-            });
-        }
+    public async addIngredienteInventario(req: Request, res: Response): Promise<void> {
+        try {
+            const { _id } = req.params;
+            if (!_id || !ObjectId.isValid(_id)) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un _id válido del usuario'
+                });
+                return;
+            }
 
-        // Procesar datos de entrada
-        const { ingredientesValidos, errores } = this.procesarIngredientes(req.body);
+            // Sanitización con tipo seguro
+            const sanitizeInput = (input: any): Partial<InventarioItem> => {
+                if (!input) return {};
 
-        if (errores.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Errores en los datos de ingredientes',
-                errors: errores
-            });
-        }
+                const sanitized: Partial<InventarioItem> = {};
+                const validKeys: Array<keyof InventarioItem> = [
+                    'ingrediente_id',
+                    'nombre',
+                    'categoria',
+                    'cantidad',
+                    'unidad',
+                    'almacenamiento',
+                    'fecha_actualizacion'
+                ];
 
+                validKeys.forEach(key => {
+                    if (input[key] !== undefined) {
+                        sanitized[key] = typeof input[key] === 'string'
+                            ? xss(input[key])
+                            : input[key];
+                    }
+                });
 
-        if (ingredientesValidos.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No hay ingredientes válidos para agregar'
-            });
-        }
+                return sanitized;
+            };
+
+            // Determinar si es un array o un solo ingrediente
             const inputData = req.body;
             const isArray = Array.isArray(inputData);
             const ingredientesToAdd = isArray ? inputData : [inputData];
 
+            // Validar y preparar los ingredientes
             const nuevosIngredientes: InventarioItem[] = [];
             const errors: string[] = [];
 
             for (const [index, item] of ingredientesToAdd.entries()) {
-                // Crear ingrediente nuevo, forzando ObjectId para ingrediente_id
                 const ingredienteData: InventarioItem = {
-                    ingrediente_id: item.ingrediente_id && ObjectId.isValid(item.ingrediente_id)
-                        ? new ObjectId(item.ingrediente_id)
-                        : new ObjectId(),
+                    ingrediente_id: new ObjectId(item.ingrediente_id || new ObjectId()),
                     ...sanitizeInput(item),
-                    fecha_actualizacion: item.fecha_actualizacion
-                        ? new Date(item.fecha_actualizacion)
-                        : new Date()
+                    fecha_actualizacion: new Date(item.fecha_actualizacion) || new Date()
                 } as InventarioItem;
 
-                // Validaciones
+                // Validación básica
                 if (!ingredienteData.nombre) {
                     errors.push(`Ingrediente en posición ${index + 1} no tiene nombre`);
                     continue;
                 }
-           
 
-        // Operaciones con base de datos
-        const db = getDb();
-        const usuario = await db.collection<Usuario>('usuarios')
-            .findOne({ _id: new ObjectId(_id) });
-
-        if (!usuario) {
-            return res.status(404).json({
-                success: false,
-                message: 'Usuario no encontrado'
-            });
-        }
-
-        // Actualizar inventario
-        const inventarioActualizado = [...usuario.inventario || [], ...ingredientesValidos];
-
-        await db.collection<Usuario>('usuarios').updateOne(
-            { _id: new ObjectId(_id) },
-            {
-                $set: {
-                    inventario: inventarioActualizado,
-                    fecha_actualizacion: new Date()
+                if (!ingredienteData.categoria) {
+                    errors.push(`Ingrediente '${ingredienteData.nombre}' no tiene categoría`);
+                    continue;
                 }
-            }
-        );
 
-        // Respuesta exitosa
-        const esArray = Array.isArray(req.body);
-        return res.status(200).json({
-            success: true,
-            message: esArray
-                ? `${ingredientesValidos.length} ingredientes agregados al inventario`
-                : 'Ingrediente agregado al inventario',
-            data: {
-                ingredientes: ingredientesValidos,
-                totalIngredientes: inventarioActualizado.length,
-                addedCount: ingredientesValidos.length
-            }
-        });
-
-    } catch (error) {
-        console.error('Error al agregar ingrediente(s):', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error al agregar ingrediente(s)',
-            error: error instanceof Error ? error.message : 'Error desconocido'
-        });
-    }
-}
-
-private sanitizeInput(input: any): any {
-    if (!input) return {};
-    
-    return {
-        nombre: typeof input.nombre === 'string' ? input.nombre.trim() : '',
-        categoria: typeof input.categoria === 'string' ? input.categoria.trim() : '',
-        cantidad: typeof input.cantidad === 'number' ? input.cantidad : 0,
-        unidad: typeof input.unidad === 'string' ? input.unidad.trim() : '',
-        almacenamiento: typeof input.almacenamiento === 'string' ? input.almacenamiento.trim() : ''
-    };
-}
-
-    private procesarIngredientes(inputData: any): {
-        ingredientesValidos: InventarioItem[],
-        errores: string[]
-    } {
-        const ingredientes = Array.isArray(inputData) ? inputData : [inputData];
-        const ingredientesValidos: InventarioItem[] = [];
-        const errores: string[] = [];
-
-        for (const [index, item] of ingredientes.entries()) {
-            const ingrediente = this.crearIngredienteValidado(item);
-
-            if (!ingrediente.nombre) {
-                errores.push(`Ingrediente en posición ${index + 1} no tiene nombre`);
-                continue;
+                nuevosIngredientes.push(ingredienteData);
             }
 
-            // Buscar usuario
+            if (errors.length > 0) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Errores en los datos de ingredientes',
+                    errors
+                });
+                return;
+            }
+
+            if (nuevosIngredientes.length === 0) {
+                res.status(400).json({
+                    success: false,
+                    message: 'No hay ingredientes válidos para agregar'
+                });
+                return;
+            }
+
+            const db = getDb();
+            const usuariosCollection = db.collection<Usuario>('usuarios');
+
+            // Obtener usuario
             const usuario = await usuariosCollection.findOne({ _id: new ObjectId(_id) });
             if (!usuario) {
                 res.status(404).json({
@@ -694,11 +645,10 @@ private sanitizeInput(input: any): any {
                 return;
             }
 
-            // Si no tiene inventario, crear array vacío para agregar
-            const inventarioActual = Array.isArray(usuario.inventario) ? usuario.inventario : [];
+            // Agregar los nuevos ingredientes
+            const inventarioActual = usuario.inventario || [];
             const nuevoInventario = [...inventarioActual, ...nuevosIngredientes];
 
-            // Actualizar inventario en la base de datos
             const result = await usuariosCollection.updateOne(
                 { _id: new ObjectId(_id) },
                 {
@@ -709,35 +659,26 @@ private sanitizeInput(input: any): any {
                 }
             );
 
-
-            if (!ingrediente.categoria) {
-                errores.push(`Ingrediente '${ingrediente.nombre}' no tiene categoría`);
-                continue;
-            }
-
-            ingredientesValidos.push(ingrediente);
+            res.status(200).json({
+                success: true,
+                message: isArray
+                    ? `${nuevosIngredientes.length} ingredientes agregados al inventario`
+                    : 'Ingrediente agregado al inventario',
+                data: {
+                    ingredientes: nuevosIngredientes,
+                    totalIngredientes: nuevoInventario.length,
+                    addedCount: nuevosIngredientes.length
+                }
+            });
+        } catch (error) {
+            console.error('Error al agregar ingrediente(s):', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al agregar ingrediente(s)',
+                error: error instanceof Error ? error.message : 'Error desconocido'
+            });
         }
-
-        return { ingredientesValidos, errores };
     }
-
-    private crearIngredienteValidado(item: any): InventarioItem {
-        const sanitized = this.sanitizeInput(item);
-        return {
-            ingrediente_id: item.ingrediente_id
-                ? new ObjectId(String(item.ingrediente_id))
-                : new ObjectId(),
-            nombre: sanitized.nombre ?? '',
-            categoria: sanitized.categoria ?? '',
-            cantidad: sanitized.cantidad ?? 0,
-            unidad: sanitized.unidad ?? '',
-            almacenamiento: sanitized.almacenamiento ?? '',
-            fecha_actualizacion: item.fecha_actualizacion
-                ? new Date(String(item.fecha_actualizacion))
-                : new Date()
-        };
-    }
-
 
     public async updateInventarioItem(req: Request, res: Response): Promise<void> {
         try {
