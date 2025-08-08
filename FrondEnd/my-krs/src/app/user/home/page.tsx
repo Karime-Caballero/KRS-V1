@@ -65,6 +65,7 @@ export default function UserHome() {
               href: '/recetas',
             },
           ].map((opcion, idx) => (
+            // @ts-expect-error MUI typing issue
             <Grid item xs={12} sm={6} md={4} key={idx}>
               <Card
                 elevation={6}

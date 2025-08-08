@@ -585,23 +585,26 @@ class UsuariosController {
                 return sanitized;
             };
 
-            // Determinar si es un array o un solo ingrediente
             const inputData = req.body;
             const isArray = Array.isArray(inputData);
             const ingredientesToAdd = isArray ? inputData : [inputData];
 
-            // Validar y preparar los ingredientes
             const nuevosIngredientes: InventarioItem[] = [];
             const errors: string[] = [];
 
             for (const [index, item] of ingredientesToAdd.entries()) {
+                // Crear ingrediente nuevo, forzando ObjectId para ingrediente_id
                 const ingredienteData: InventarioItem = {
-                    ingrediente_id: new ObjectId(item.ingrediente_id || new ObjectId()),
+                    ingrediente_id: item.ingrediente_id && ObjectId.isValid(item.ingrediente_id)
+                        ? new ObjectId(item.ingrediente_id)
+                        : new ObjectId(),
                     ...sanitizeInput(item),
-                    fecha_actualizacion: new Date(item.fecha_actualizacion) || new Date()
+                    fecha_actualizacion: item.fecha_actualizacion
+                        ? new Date(item.fecha_actualizacion)
+                        : new Date()
                 } as InventarioItem;
 
-                // Validación básica
+                // Validaciones
                 if (!ingredienteData.nombre) {
                     errors.push(`Ingrediente en posición ${index + 1} no tiene nombre`);
                     continue;
@@ -635,7 +638,7 @@ class UsuariosController {
             const db = getDb();
             const usuariosCollection = db.collection<Usuario>('usuarios');
 
-            // Obtener usuario
+            // Buscar usuario
             const usuario = await usuariosCollection.findOne({ _id: new ObjectId(_id) });
             if (!usuario) {
                 res.status(404).json({
@@ -645,10 +648,11 @@ class UsuariosController {
                 return;
             }
 
-            // Agregar los nuevos ingredientes
-            const inventarioActual = usuario.inventario || [];
+            // Si no tiene inventario, crear array vacío para agregar
+            const inventarioActual = Array.isArray(usuario.inventario) ? usuario.inventario : [];
             const nuevoInventario = [...inventarioActual, ...nuevosIngredientes];
 
+            // Actualizar inventario en la base de datos
             const result = await usuariosCollection.updateOne(
                 { _id: new ObjectId(_id) },
                 {
@@ -679,6 +683,7 @@ class UsuariosController {
             });
         }
     }
+
 
     public async updateInventarioItem(req: Request, res: Response): Promise<void> {
         try {
