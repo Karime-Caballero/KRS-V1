@@ -1,32 +1,28 @@
 version: "3.8"
 
-services:
-  frontend:
-    build: ./FrondEnd/my-krs
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:4000
+networks:
+  krs-network:
 
+services:
   backend:
-    build: ./Backend
+    image: salvadorvgac04/krs-v1-backend:1.0
+    container_name: krs-v1-backend-1
     ports:
       - "4000:4000"
-    depends_on:
-      - mongo
     environment:
-      - MONGO_URI=mongodb://mongo:27017/midb
+      - MONGO_URI=mongodb+srv://rl4357011:cjIZTFJntLwmqOLR@cluster0.sike1gh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
       - PORT=4000
+    networks:
+      - krs-network
 
-  mongo:
-    image: mongo:6
-    container_name: mongo_db
+  frontend:
+    image: salvadorvgac04/krs-v1-frontend:1.0
+    container_name: krs-v1-frontend-1
     ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
-volumes:
-  mongo_data:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+    depends_on:
+      - backend
+    networks:
+      - krs-network
