@@ -1,11 +1,17 @@
 import { MongoClient, Db, MongoClientOptions } from 'mongodb';
-import keys from './keys';
+import dotenv from 'dotenv';
 
-// Variables para la conexión
+dotenv.config();
+
+const mongoUri = process.env.MONGO_URI || '';
+
+if (!mongoUri) {
+    throw new Error('La variable de entorno MONGO_URI no está definida');
+}
+
 let client: MongoClient | null = null;
 let db: Db | null = null;
 
-// Opciones de seguridad para la conexión
 const mongoOptions: MongoClientOptions = {
     maxPoolSize: 50,
     connectTimeoutMS: 10000,
@@ -19,19 +25,21 @@ const mongoOptions: MongoClientOptions = {
 
 export async function connectToMongo(): Promise<void> {
     try {
+        console.log('Mongo URI que se está usando:', mongoUri);
+
         if (client && db) {
             return;
         }
-        
-        client = new MongoClient(keys.mongo.uri, mongoOptions);
+
+        client = new MongoClient(mongoUri, mongoOptions);
         await client.connect();
-        
-        // Verificamos la conexión con un ping
+
         await client.db().command({ ping: 1 });
-        
-        db = client.db(keys.mongo.dbName);
+
+        // Aquí extraemos el nombre de la DB de la URI, si quieres hardcodear usa otra variable
+        // Por ejemplo, puedes definirla en env MONGO_DB_NAME, pero si no:
+        db = client.db(); // db por defecto de la URI
         console.log('Conexión exitosa a MongoDB');
-        
     } catch (error) {
         console.error('Error al conectar a MongoDB:', error);
         throw error;
@@ -72,12 +80,10 @@ process.on('SIGTERM', async () => {
     process.exit(0);
 });
 
-// Función para verificar el estado de la conexión
 export async function checkConnection(): Promise<boolean> {
     try {
         if (!client) return false;
-        
-        // Alternativa a isConnected (que está deprecado)
+
         await client.db().command({ ping: 1 });
         return true;
     } catch {

@@ -8,6 +8,9 @@ import recetasExternasRoutes from './rutas/recetasExternasRoutes';
 import plansRoutes from './rutas/plansRoutes';
 import bodyParser from 'body-parser';
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 class Server {
     public app: Application;
     private dbConnected: boolean = false;
@@ -74,7 +77,7 @@ class Server {
         }
 
         this.app.listen(this.app.get('port'), () => {
-            console.log(`Servidor corriendo en http://localhost:${this.app.get('port')}`);
+            console.log(`Servidor corriendo en Atlas, en el puerto http://localhost:${this.app.get('port')}`);
         });
     }
 }
