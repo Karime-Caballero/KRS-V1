@@ -1,6 +1,6 @@
 export default {
     mongo: {
-        uri: 'mongodb+srv://rl4357011:cjIZTFJntLwmqOLR@cluster0.sike1gh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
-        dbName: 'Cluster0'
-    } 
+        uri: process.env.MONGO_URI || 'mongodb+srv://rl4357011:cjIZTFJntLwmqOLR@cluster0.sike1gh.mongodb.net/?retryWrites=true&w=majority',
+        dbName: process.env.MONGO_DB_NAME || 'Cluster0'
+    }
 };
