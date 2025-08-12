@@ -36,7 +36,7 @@ export default function Planificador() {
   const fetchMenuDesdeAPI = async (): Promise<string | null> => {
     try {
       const userId = JSON.parse(localStorage.getItem('user') || '{}')._id;
-      const res = await fetch(`http://localhost:4000/plans/${userId}/generate`, {
+      const res = await fetch(`http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/plans/${userId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -61,7 +61,7 @@ export default function Planificador() {
 
   const fetchPlanPorId = async (planId: string) => {
     try {
-      const res = await fetch(`http://localhost:4000/plans/${planId}`);
+      const res = await fetch(`http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/plans/${planId}`);
       const data = await res.json();
 
       if (!res.ok) {

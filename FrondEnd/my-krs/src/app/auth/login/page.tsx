@@ -64,7 +64,7 @@ const LoginPage = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:4000/auth/login', {
+      const response = await fetch('http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

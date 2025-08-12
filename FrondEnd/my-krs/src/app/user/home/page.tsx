@@ -25,7 +25,7 @@ export default function UserHome() {
         display: 'flex',
         flexDirection: 'column',
         py: 8,
-        color: '#5D4037',
+        color: '#5D4037',  
       }}
     >
       <Container maxWidth="lg">

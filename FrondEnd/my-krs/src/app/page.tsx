@@ -146,19 +146,7 @@ export default function HomePage() {
             ))}
           </Grid>
         </Box>
-            <Image
-              src="https://personaconsumidora.elika.eus/wp-content/uploads/2021/04/5.Planificando-menu-semanal.jpg"
-              alt="Ilustración menú semanal"
-              width={500}
-              height={360}
-              style={{
-                borderRadius: '12px',
-                maxWidth: '100%',
-                height: 'auto',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
-              }}
-              priority
-            />
+        
 
             
           </Grid>

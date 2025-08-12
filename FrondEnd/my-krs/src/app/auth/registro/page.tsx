@@ -88,7 +88,7 @@ const handleTogglePassword = () => {
   }
 
   try {
-    const response = await fetch('http://localhost:4000/auth/signup', {
+    const response = await fetch('http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/auth/signup', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
