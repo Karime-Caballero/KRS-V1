@@ -82,7 +82,7 @@ const PerfilAlimenticio = () => {
         const userId = user._id;
 
         // Obtener perfil alimenticio
-        const resPerfil = await fetch(`http://localhost:4000/users/${userId}/preferencias`);
+        const resPerfil = await fetch(`http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/users/${userId}/preferencias`);
         if (!resPerfil.ok) throw new Error('No se pudo obtener el perfil');
         const perfil = await resPerfil.json();
         const preferencias = perfil.data?.preferencias;
@@ -94,7 +94,7 @@ const PerfilAlimenticio = () => {
         setTiempoMaximoPreparacion(preferencias?.tiempo_max_preparacion?.toString() || '');
 
         // Obtener ingredientes en casa
-        const resIngredientes = await fetch(`http://localhost:4000/users/${userId}/pantry`);
+        const resIngredientes = await fetch(`http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/users/${userId}/pantry`);
         if (!resIngredientes.ok) throw new Error('No se pudo obtener los ingredientes');
 
         const ingredientesData = await resIngredientes.json();
@@ -316,7 +316,7 @@ const PerfilAlimenticio = () => {
         fecha_actualizacion: new Date().toISOString(),
       }));
 
-      const ingredientesResponse = await fetch(`http://localhost:4000/users/${userId}/pantry`, {
+      const ingredientesResponse = await fetch(`http://ec2-3-18-225-195.us-east-2.compute.amazonaws.com:4000/users/${userId}/pantry`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
