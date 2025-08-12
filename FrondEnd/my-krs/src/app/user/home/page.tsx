@@ -41,7 +41,7 @@ export default function UserHome() {
         <Grid container spacing={4} justifyContent="center">
           {[
             {
-              title: 'Mi Perfil Alimenticio',
+              title: 'Mi Perfil Alimenticio Salvador',
               description: 'Consulta o edita tus preferencias, alergias e ingredientes en casa.',
               icon: <KitchenIcon sx={{ fontSize: 50, color: '#EF6C00' }} />,
               href: '/user/formulario',
